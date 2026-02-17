@@ -96,6 +96,16 @@ EXCHANGE_RATES = {
 PHOTO_TYPES = ["Overview", "Close-up"]
 
 # ==============================================================================
+# IMAGE PROCESSING CONFIGURATION
+# ==============================================================================
+
+# Settings for resizing/compressing photos before sending to Claude
+IMAGE_CONFIG = {
+    "max_dimension": 1568,  # Claude's max processing resolution (px, longest side)
+    "jpeg_quality": 85,     # JPEG compression quality (0-100)
+}
+
+# ==============================================================================
 # CLAUDE API CONFIGURATION
 # ==============================================================================
 
@@ -107,6 +117,17 @@ CLAUDE_CONFIG = {
         "type": "enabled",
         "budget_tokens": 10000  # Balanced thinking for good speed and accuracy
     }
+}
+
+# ==============================================================================
+# API PRICING (for cost estimation display)
+# ==============================================================================
+
+# Anthropic pricing per 1 million tokens
+# Update these values if pricing changes: https://www.anthropic.com/pricing
+PRICING = {
+    "input_per_million": 15.00,   # USD per 1M input tokens
+    "output_per_million": 75.00,  # USD per 1M output tokens (includes thinking)
 }
 
 # ==============================================================================

@@ -299,14 +299,13 @@ if st.button("Analyze Shelf", disabled=not can_analyze, type="primary"):
     from modules.prompt_builder import build_prompt
     from modules.claude_client import analyze_shelf
     from prompts.shelf_analysis import SYSTEM_PROMPT
-    from config import EXCHANGE_RATES
+    from config import EXCHANGE_RATES, PRICING
     
     # Show progress status
     with st.status("Analyzing shelf photos...", expanded=True) as status:
         try:
             # Step 1: Build prompt
-            st.write("DEBUG: Step 1 - Building prompt from metadata...")
-            st.write(f"DEBUG: Photos to process: {len(st.session_state['photo_tags'])}")
+            st.write(f"Building prompt for {len(st.session_state['photo_tags'])} photos...")
             
             # Build metadata dictionary
             final_retailer = (
@@ -353,33 +352,27 @@ if st.button("Analyze Shelf", disabled=not can_analyze, type="primary"):
                 transcript_text=st.session_state["transcript_text"]
             )
             
-            st.write(f"DEBUG: Prompt built successfully ({len(user_prompt)} characters)")
-            
-            # Step 2: Call Claude API
-            st.write(f"DEBUG: Step 2 - Calling analyze_shelf() with {len(st.session_state['photo_tags'])} photos...")
-            st.write("DEBUG: This may take 1-3 minutes with Extended Thinking enabled...")
-            
-            # Call the API with full photo data
+            # Step 2: Call Claude API (streaming)
             result = analyze_shelf(
                 system_prompt=SYSTEM_PROMPT,
                 user_prompt=user_prompt,
-                photos=st.session_state["photo_tags"]  # Contains 'data' field
+                photos=st.session_state["photo_tags"]
             )
             
             # Step 3: Store results
-            st.write("DEBUG: Step 3 - API call returned, storing results...")
-            st.write(f"DEBUG: Result type: {type(result)}, length: {len(result) if isinstance(result, list) else 'N/A'}")
-            st.session_state["analysis_result"] = result
+            skus = result["skus"]
+            st.session_state["analysis_result"] = skus
+            st.session_state["analysis_usage"] = result["usage"]
+            st.session_state["analysis_elapsed"] = result["elapsed_seconds"]
+            st.session_state["analysis_image_savings"] = result["image_savings"]
             
             # Update status to complete
-            st.write("DEBUG: Analysis complete, updating status...")
             status.update(label="Analysis complete!", state="complete", expanded=False)
             
             # Show success message with SKU count
-            st.success(f"Analysis complete! Found {len(result)} SKUs.")
+            st.success(f"Analysis complete! Found {len(skus)} SKUs.")
         
         except Exception as e:
-            st.write(f"DEBUG: Exception caught in main try/except: {type(e).__name__}")
             status.update(label="Analysis failed", state="error", expanded=True)
             st.error(f"Error during analysis: {str(e)}")
             import traceback
@@ -391,11 +384,93 @@ if "analysis_result" in st.session_state and st.session_state["analysis_result"]
     st.subheader("Analysis Results")
     st.write(f"**Total SKUs found:** {len(st.session_state['analysis_result'])}")
     
+    # Show usage metrics if available
+    if "analysis_usage" in st.session_state:
+        from config import PRICING
+        
+        usage = st.session_state["analysis_usage"]
+        elapsed = st.session_state.get("analysis_elapsed", 0)
+        savings = st.session_state.get("analysis_image_savings", {})
+        
+        input_tok = usage["input_tokens"]
+        output_tok = usage["output_tokens"]
+        total_tok = input_tok + output_tok
+        
+        input_cost = input_tok * PRICING["input_per_million"] / 1_000_000
+        output_cost = output_tok * PRICING["output_per_million"] / 1_000_000
+        total_cost = input_cost + output_cost
+        
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+        col_m1.metric("Total Tokens", f"{total_tok:,}")
+        col_m2.metric("Input Tokens", f"{input_tok:,}")
+        col_m3.metric("Output Tokens", f"{output_tok:,}")
+        col_m4.metric("Estimated Cost", f"${total_cost:.2f}")
+        
+        col_t1, col_t2 = st.columns(2)
+        col_t1.metric("Processing Time", f"{elapsed:.1f}s")
+        if savings.get("original_bytes", 0) > 0:
+            orig_mb = savings["original_bytes"] / (1024 * 1024)
+            proc_mb = savings["processed_bytes"] / (1024 * 1024)
+            col_t2.metric("Image Payload", f"{proc_mb:.1f} MB", delta=f"-{orig_mb - proc_mb:.1f} MB")
+    
     # Show a preview of the first few SKUs
     with st.expander("Preview first 3 SKUs"):
         import json
         preview_data = st.session_state['analysis_result'][:3]
         st.json(preview_data)
+    
+    # ==============================================================================
+    # DOWNLOAD EXCEL BUTTON
+    # ==============================================================================
+    
+    from modules.excel_generator import generate_excel
+    from datetime import datetime
+    
+    # Build metadata dictionary for Excel generation
+    final_retailer = (
+        st.session_state["retailer_other"] 
+        if st.session_state["retailer"] == "Other" 
+        else st.session_state["retailer"]
+    )
+    final_store_format = (
+        st.session_state["store_format_other"] 
+        if st.session_state["store_format"] == "Other" 
+        else st.session_state["store_format"]
+    )
+    final_shelf_location = (
+        st.session_state["shelf_location_other"] 
+        if st.session_state["shelf_location"] == "Other" 
+        else st.session_state["shelf_location"]
+    )
+    
+    metadata_dict = {
+        "country": st.session_state["country"],
+        "city": st.session_state["city"],
+        "retailer": final_retailer,
+        "store_format": final_store_format,
+        "store_name": st.session_state["store_name"],
+        "shelf_location": final_shelf_location,
+        "currency": st.session_state["currency"]
+    }
+    
+    # Generate Excel file
+    excel_bytes = generate_excel(st.session_state["analysis_result"], metadata_dict)
+    
+    # Build filename: {Retailer}_{City}_{YYYY-MM-DD}.xlsx
+    # Replace spaces with underscores in retailer and city
+    retailer_clean = final_retailer.replace(" ", "_")
+    city_clean = st.session_state["city"].replace(" ", "_")
+    today_date = datetime.now().strftime("%Y-%m-%d")
+    filename = f"{retailer_clean}_{city_clean}_{today_date}.xlsx"
+    
+    # Show download button
+    st.download_button(
+        label="Download Excel",
+        data=excel_bytes,
+        file_name=filename,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        type="primary"
+    )
 
 # ==============================================================================
 # TEMPORARY DEBUG SECTION — Preview Prompt

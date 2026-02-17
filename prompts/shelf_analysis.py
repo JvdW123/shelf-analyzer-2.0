@@ -106,42 +106,36 @@ If a transcript is provided above, it contains a voice description of the shelf.
 4. Complete all photos sequentially
 5. Then DEDUPLICATE within each group using overview photos, then across groups
 
-### Column Schema — 32 Columns in Exact Order
+### Column Schema — 24 AI-Provided Columns
+
+IMPORTANT: Do NOT include Country, City, Retailer, Store Format, Store Name, Shelf Location, Currency, or Price per Liter in your JSON output. These are added automatically by the app from the metadata above.
 
 | # | Column | Type | Source | Allowed Values |
 |---|--------|------|--------|----------------|
-| 1 | Country | text | Metadata | Free text |
-| 2 | City | text | Metadata | Free text |
-| 3 | Retailer | text | Metadata | Free text |
-| 4 | Store Format | text | Metadata | FIXED: Hypermarket / Supermarket / Convenience Store / Discounter / Express Store / Other |
-| 5 | Store Name | text | Derived | Retailer + City (e.g., "Tesco London") |
-| 6 | Photo | text | Filename | EXACT original filename |
-| 7 | Shelf Location | text | Metadata | FIXED: To-Go Section / Chilled Juice Section / Fresh Produce Department / Checkout Counter / Other |
-| 8 | Shelf Levels | integer | Visual count | Numeric |
-| 9 | Shelf Level | text | Visual | FIXED: 1st / 2nd / 3rd / 4th / 5th / 6th |
-| 10 | Product Type | text | Visual + transcript | FIXED: Pure Juices / Smoothies / Shots / Other |
-| 11 | Branded/Private Label | text | Visual | FIXED: Branded / Private Label |
-| 12 | Brand | text | Visual + transcript | Free text |
-| 13 | Sub-brand | text | Visual + transcript | Free text (blank if none) |
-| 14 | Product Name | text | Visual (label) | Free text — see NAMING RULES |
-| 15 | Flavor | text | Visual (label) | Free text — see NAMING RULES |
-| 16 | Facings | integer | Visual count | Numeric (front row only) |
-| 17 | Price (Local Currency) | float | Price label | Numeric (null if not visible) |
-| 18 | Currency | text | Metadata | FIXED: GBP / EUR |
-| 19 | Price (EUR) | float | Calculated | Numeric (null if no local price) |
-| 20 | Packaging Size (ml) | integer | Visual (label) | Numeric (null if not visible) |
-| 21 | Price per Liter (EUR) | float | Calculated | null — will be Excel formula in output |
-| 22 | Need State | text | AI assessment | FIXED: Indulgence / Functional |
-| 23 | Juice Extraction Method | text | Visual + transcript | FIXED: Squeezed / Cold Pressed / From Concentrate (null if unknown) |
-| 24 | Processing Method | text | Visual + transcript | FIXED: Pasteurized / HPP (null if unknown) |
-| 25 | HPP Treatment | text | Visual + transcript | FIXED: Yes / No (null if unknown) |
-| 26 | Packaging Type | text | Visual | FIXED: PET Bottle / Tetra Pak / Can / Carton / Glass Bottle |
-| 27 | Claims | text | Visual (label) | Free text, comma-separated (null if none) |
-| 28 | Bonus/Promotions | text | Visual (shelf) | Free text (null if none) |
-| 29 | Stock Status | text | Visual | FIXED: In Stock / Out of Stock |
-| 30 | Est. Linear Meters | float | AI estimation | Numeric |
-| 31 | Fridge Number | text | Visual / Metadata | Free text |
-| 32 | Confidence Score | integer | AI assessment | 0-100 |
+| 1 | Photo | text | Filename | EXACT original filename |
+| 2 | Shelf Levels | integer | Visual count | Numeric |
+| 3 | Shelf Level | text | Visual | FIXED: 1st / 2nd / 3rd / 4th / 5th / 6th |
+| 4 | Product Type | text | Visual + transcript | FIXED: Pure Juices / Smoothies / Shots / Other |
+| 5 | Branded/Private Label | text | Visual | FIXED: Branded / Private Label |
+| 6 | Brand | text | Visual + transcript | Free text |
+| 7 | Sub-brand | text | Visual + transcript | Free text (blank if none) |
+| 8 | Product Name | text | Visual (label) | Free text — see NAMING RULES |
+| 9 | Flavor | text | Visual (label) | Free text — see NAMING RULES |
+| 10 | Facings | integer | Visual count | Numeric (front row only) |
+| 11 | Price (Local Currency) | float | Price label | Numeric (null if not visible) |
+| 12 | Price (EUR) | float | Calculated | Numeric (null if no local price) |
+| 13 | Packaging Size (ml) | integer | Visual (label) | Numeric (null if not visible) |
+| 14 | Need State | text | AI assessment | FIXED: Indulgence / Functional |
+| 15 | Juice Extraction Method | text | Visual + transcript | FIXED: Squeezed / Cold Pressed / From Concentrate (null if unknown) |
+| 16 | Processing Method | text | Visual + transcript | FIXED: Pasteurized / HPP (null if unknown) |
+| 17 | HPP Treatment | text | Visual + transcript | FIXED: Yes / No (null if unknown) |
+| 18 | Packaging Type | text | Visual | FIXED: PET Bottle / Tetra Pak / Can / Carton / Glass Bottle |
+| 19 | Claims | text | Visual (label) | Free text, comma-separated (null if none) |
+| 20 | Bonus/Promotions | text | Visual (shelf) | Free text (null if none) |
+| 21 | Stock Status | text | Visual | FIXED: In Stock / Out of Stock |
+| 22 | Est. Linear Meters | float | AI estimation | Numeric |
+| 23 | Fridge Number | text | Visual / Metadata | Free text |
+| 24 | Confidence Score | integer | AI assessment | 0-100 |
 
 ---
 
@@ -192,8 +186,8 @@ JSON Rules:
 - Group SKUs from the same photo together sequentially
 - Return ONLY the JSON array. No additional text, explanation, or markdown around it.
 
-Example row:
-{{"country": "UK", "city": "London", "retailer": "Tesco", "store_format": "Supermarket", "store_name": "Tesco London", "photo": "foto_4a_left_side.jpg", "shelf_location": "Chilled Section", "shelf_levels": 4, "shelf_level": "2nd", "product_type": "Smoothies", "branded_private_label": "Branded", "brand": "Innocent", "sub_brand": "", "product_name": "Gorgeous Greens", "flavor": "Apple, Kiwi and Cucumber", "facings": 3, "price_local": 3.50, "currency": "GBP", "price_eur": 4.10, "packaging_size_ml": 750, "price_per_liter_eur": null, "need_state": "Functional", "juice_extraction_method": "Squeezed", "processing_method": "Pasteurized", "hpp_treatment": "No", "packaging_type": "PET Bottle", "claims": "No added sugar, Never from concentrate", "bonus_promotions": null, "stock_status": "In Stock", "est_linear_meters": 0.25, "fridge_number": "Fridge 1", "confidence_score": 85}}
+Example row (note: no country/city/retailer/store_format/store_name/shelf_location/currency/price_per_liter_eur):
+{{"photo": "foto_4a_left_side.jpg", "shelf_levels": 4, "shelf_level": "2nd", "product_type": "Smoothies", "branded_private_label": "Branded", "brand": "Innocent", "sub_brand": "", "product_name": "Gorgeous Greens", "flavor": "Apple, Kiwi and Cucumber", "facings": 3, "price_local": 3.50, "price_eur": 4.10, "packaging_size_ml": 750, "need_state": "Functional", "juice_extraction_method": "Squeezed", "processing_method": "Pasteurized", "hpp_treatment": "No", "packaging_type": "PET Bottle", "claims": "No added sugar, Never from concentrate", "bonus_promotions": null, "stock_status": "In Stock", "est_linear_meters": 0.25, "fridge_number": "Fridge 1", "confidence_score": 85}}
 
 Return ONLY the JSON array. No text before or after it.
 
@@ -224,8 +218,6 @@ General Rules:
 - Multi-packs = 1 SKU, 1 facing.
 
 FIXED VALUE REFERENCE:
-Store Format: Hypermarket, Supermarket, Convenience Store, Discounter, Express Store, Other
-Shelf Location: To-Go Section, Chilled Juice Section, Fresh Produce Department, Checkout Counter, Other
 Shelf Level: 1st, 2nd, 3rd, 4th, 5th, 6th
 Product Type: Pure Juices, Smoothies, Shots, Other
 Branded/Private Label: Branded, Private Label
