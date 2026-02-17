@@ -96,6 +96,7 @@ if not st.session_state["authenticated"]:
 # ==============================================================================
 
 st.title("Shelf Analyzer 2.0")
+st.caption("Upload shelf photos, get structured Excel reports.")
 st.header("Store Information")
 
 # Row 1: Country and City
@@ -293,96 +294,193 @@ else:
 # Enable button only if all requirements are met
 can_analyze = photos_uploaded and city_filled and retailer_filled and store_name_filled
 
+
+def validate_metadata() -> tuple[bool, list[str]]:
+    """
+    Validate all required metadata fields before API call.
+    
+    Returns:
+        Tuple of (is_valid, list_of_missing_fields)
+    """
+    missing_fields = []
+    
+    # Check country (should always be filled from dropdown)
+    if not st.session_state.get("country", "").strip():
+        missing_fields.append("Country")
+    
+    # Check city
+    if not st.session_state.get("city", "").strip():
+        missing_fields.append("City")
+    
+    # Check retailer
+    retailer = st.session_state.get("retailer")
+    if not retailer:
+        missing_fields.append("Retailer")
+    elif retailer == "Other" and not st.session_state.get("retailer_other", "").strip():
+        missing_fields.append("Retailer (specify)")
+    
+    # Check store format (if "Other" selected)
+    store_format = st.session_state.get("store_format")
+    if store_format == "Other" and not st.session_state.get("store_format_other", "").strip():
+        missing_fields.append("Store Format (specify)")
+    
+    # Check store name
+    if not st.session_state.get("store_name", "").strip():
+        missing_fields.append("Store Name")
+    
+    # Check shelf location (if "Other" selected)
+    shelf_location = st.session_state.get("shelf_location")
+    if shelf_location == "Other" and not st.session_state.get("shelf_location_other", "").strip():
+        missing_fields.append("Shelf Location (specify)")
+    
+    return len(missing_fields) == 0, missing_fields
+
+
 # Analyze button
 if st.button("Analyze Shelf", disabled=not can_analyze, type="primary"):
-    # Import required modules
-    from modules.prompt_builder import build_prompt
-    from modules.claude_client import analyze_shelf
-    from prompts.shelf_analysis import SYSTEM_PROMPT
-    from config import EXCHANGE_RATES, PRICING
+    # Validate metadata before proceeding
+    is_valid, missing_fields = validate_metadata()
     
-    # Show progress status
-    with st.status("Analyzing shelf photos...", expanded=True) as status:
-        try:
-            # Step 1: Build prompt
-            st.write(f"Building prompt for {len(st.session_state['photo_tags'])} photos...")
-            
-            # Build metadata dictionary
-            final_retailer = (
-                st.session_state["retailer_other"] 
-                if st.session_state["retailer"] == "Other" 
-                else st.session_state["retailer"]
-            )
-            final_store_format = (
-                st.session_state["store_format_other"] 
-                if st.session_state["store_format"] == "Other" 
-                else st.session_state["store_format"]
-            )
-            final_shelf_location = (
-                st.session_state["shelf_location_other"] 
-                if st.session_state["shelf_location"] == "Other" 
-                else st.session_state["shelf_location"]
-            )
-            
-            metadata = {
-                "country": st.session_state["country"],
-                "city": st.session_state["city"],
-                "retailer": final_retailer,
-                "store_format": final_store_format,
-                "store_name": st.session_state["store_name"],
-                "shelf_location": final_shelf_location,
-                "currency": st.session_state["currency"],
-                "exchange_rate": EXCHANGE_RATES["GBP_TO_EUR"]
-            }
-            
-            # Get photo tags (without 'data' for prompt building)
-            photo_tags_for_prompt = [
-                {
-                    "filename": tag["filename"],
-                    "type": tag["type"],
-                    "group": tag["group"]
-                }
-                for tag in st.session_state["photo_tags"]
-            ]
-            
-            # Build the complete prompt
-            user_prompt = build_prompt(
-                metadata=metadata,
-                photo_tags=photo_tags_for_prompt,
-                transcript_text=st.session_state["transcript_text"]
-            )
-            
-            # Step 2: Call Claude API (streaming)
-            result = analyze_shelf(
-                system_prompt=SYSTEM_PROMPT,
-                user_prompt=user_prompt,
-                photos=st.session_state["photo_tags"]
-            )
-            
-            # Step 3: Store results
-            skus = result["skus"]
-            st.session_state["analysis_result"] = skus
-            st.session_state["analysis_usage"] = result["usage"]
-            st.session_state["analysis_elapsed"] = result["elapsed_seconds"]
-            st.session_state["analysis_image_savings"] = result["image_savings"]
-            
-            # Update status to complete
-            status.update(label="Analysis complete!", state="complete", expanded=False)
-            
-            # Show success message with SKU count
-            st.success(f"Analysis complete! Found {len(skus)} SKUs.")
+    if not is_valid:
+        st.warning(f"Please fill in the following required fields: {', '.join(missing_fields)}")
+    else:
+        # Import required modules
+        from modules.prompt_builder import build_prompt
+        from modules.claude_client import analyze_shelf
+        from prompts.shelf_analysis import SYSTEM_PROMPT
+        from config import EXCHANGE_RATES, PRICING
+        import anthropic
+        import json
         
-        except Exception as e:
-            status.update(label="Analysis failed", state="error", expanded=True)
-            st.error(f"Error during analysis: {str(e)}")
-            import traceback
-            st.error(f"Full traceback:\n{traceback.format_exc()}")
+        # Show progress status with detailed steps
+        with st.status("Analyzing shelf photos...", expanded=True) as status:
+            try:
+                # Step 1: Prepare photos
+                num_photos = len(st.session_state['photo_tags'])
+                st.write(f"Step 1: Preparing {num_photos} photos for analysis...")
+                
+                # Build metadata dictionary
+                final_retailer = (
+                    st.session_state["retailer_other"] 
+                    if st.session_state["retailer"] == "Other" 
+                    else st.session_state["retailer"]
+                )
+                final_store_format = (
+                    st.session_state["store_format_other"] 
+                    if st.session_state["store_format"] == "Other" 
+                    else st.session_state["store_format"]
+                )
+                final_shelf_location = (
+                    st.session_state["shelf_location_other"] 
+                    if st.session_state["shelf_location"] == "Other" 
+                    else st.session_state["shelf_location"]
+                )
+                
+                metadata = {
+                    "country": st.session_state["country"],
+                    "city": st.session_state["city"],
+                    "retailer": final_retailer,
+                    "store_format": final_store_format,
+                    "store_name": st.session_state["store_name"],
+                    "shelf_location": final_shelf_location,
+                    "currency": st.session_state["currency"],
+                    "exchange_rate": EXCHANGE_RATES["GBP_TO_EUR"]
+                }
+                
+                # Get photo tags (without 'data' for prompt building)
+                photo_tags_for_prompt = [
+                    {
+                        "filename": tag["filename"],
+                        "type": tag["type"],
+                        "group": tag["group"]
+                    }
+                    for tag in st.session_state["photo_tags"]
+                ]
+                
+                # Build the complete prompt
+                user_prompt = build_prompt(
+                    metadata=metadata,
+                    photo_tags=photo_tags_for_prompt,
+                    transcript_text=st.session_state["transcript_text"]
+                )
+                
+                # Store prompt for debug view
+                st.session_state["last_prompt"] = user_prompt
+                
+                # Step 2: Send to Claude
+                st.write("Step 2: Sending to Claude Extended Thinking... (this may take 1-3 minutes)")
+                
+                # Call Claude API (streaming)
+                result = analyze_shelf(
+                    system_prompt=SYSTEM_PROMPT,
+                    user_prompt=user_prompt,
+                    photos=st.session_state["photo_tags"]
+                )
+                
+                # Step 3: Parse response
+                st.write("Step 3: Parsing response...")
+                
+                skus = result["skus"]
+                
+                # Check if result is empty
+                if not skus or len(skus) == 0:
+                    status.update(label="No SKUs found", state="error", expanded=False)
+                    st.error("No SKUs found. Check your photos and try again.")
+                else:
+                    # Step 4: Complete
+                    st.write(f"Step 4: Complete! Found {len(skus)} SKUs.")
+                    
+                    # Store results
+                    st.session_state["analysis_result"] = skus
+                    st.session_state["analysis_usage"] = result["usage"]
+                    st.session_state["analysis_elapsed"] = result["elapsed_seconds"]
+                    st.session_state["analysis_image_savings"] = result["image_savings"]
+                    st.session_state["raw_response"] = result.get("raw_response", "")
+                    
+                    # Update status to complete
+                    status.update(label=f"Analysis complete! Found {len(skus)} SKUs.", state="complete", expanded=False)
+            
+            except anthropic.AuthenticationError:
+                status.update(label="Authentication failed", state="error", expanded=False)
+                st.error("Invalid API key. Check your settings.")
+            
+            except anthropic.APITimeoutError:
+                status.update(label="Request timed out", state="error", expanded=False)
+                st.error("Analysis timed out. Try with fewer photos or try again.")
+            
+            except anthropic.APIConnectionError:
+                status.update(label="Connection failed", state="error", expanded=False)
+                st.error("Network error. Check your internet connection.")
+            
+            except json.JSONDecodeError as e:
+                status.update(label="Invalid JSON response", state="error", expanded=False)
+                st.error("Claude returned invalid JSON. See details below.")
+                raw_response = st.session_state.get("raw_response", "No response captured")
+                with st.expander("Raw Response", expanded=True):
+                    st.code(raw_response, language="text")
+                st.error(f"JSON Parse Error: {str(e)}")
+            
+            except Exception as e:
+                status.update(label="Analysis failed", state="error", expanded=False)
+                error_type = type(e).__name__
+                st.error(f"Unexpected error ({error_type}): {str(e)}")
+                
+                # Show traceback in expander for debugging
+                import traceback
+                with st.expander("Error Details", expanded=False):
+                    st.code(traceback.format_exc(), language="text")
 
 # Show results if available
 if "analysis_result" in st.session_state and st.session_state["analysis_result"]:
     st.divider()
     st.subheader("Analysis Results")
-    st.write(f"**Total SKUs found:** {len(st.session_state['analysis_result'])}")
+    
+    # Calculate summary statistics
+    skus = st.session_state['analysis_result']
+    num_skus = len(skus)
+    unique_brands = len(set(sku.get("brand", "").strip() for sku in skus if sku.get("brand", "").strip()))
+    
+    st.write(f"**Found {num_skus} SKUs across {unique_brands} unique brands**")
     
     # Show usage metrics if available
     if "analysis_usage" in st.session_state:
@@ -473,60 +571,68 @@ if "analysis_result" in st.session_state and st.session_state["analysis_result"]
     )
 
 # ==============================================================================
-# TEMPORARY DEBUG SECTION — Preview Prompt
+# DEBUG SECTION — Optional Debug Info
 # ==============================================================================
-# TEMPORARY — remove after Phase 2 testing
 
-if uploaded_photos:
-    with st.expander("Debug: Preview Prompt"):
-        from modules.prompt_builder import build_prompt
-        from config import EXCHANGE_RATES
+if uploaded_photos or "analysis_result" in st.session_state:
+    show_debug = st.checkbox("Show debug info", value=False)
+    
+    if show_debug:
+        # Prompt Preview
+        if uploaded_photos:
+            with st.expander("Prompt Preview", expanded=True):
+                from modules.prompt_builder import build_prompt
+                from config import EXCHANGE_RATES
+                
+                # Build metadata dictionary from session state
+                final_retailer = (
+                    st.session_state["retailer_other"] 
+                    if st.session_state["retailer"] == "Other" 
+                    else st.session_state["retailer"]
+                )
+                final_store_format = (
+                    st.session_state["store_format_other"] 
+                    if st.session_state["store_format"] == "Other" 
+                    else st.session_state["store_format"]
+                )
+                final_shelf_location = (
+                    st.session_state["shelf_location_other"] 
+                    if st.session_state["shelf_location"] == "Other" 
+                    else st.session_state["shelf_location"]
+                )
+                
+                metadata = {
+                    "country": st.session_state["country"],
+                    "city": st.session_state["city"],
+                    "retailer": final_retailer,
+                    "store_format": final_store_format,
+                    "store_name": st.session_state["store_name"],
+                    "shelf_location": final_shelf_location,
+                    "currency": st.session_state["currency"],
+                    "exchange_rate": EXCHANGE_RATES["GBP_TO_EUR"]
+                }
+                
+                # Get photo tags from session state (without the 'data' field for preview)
+                photo_tags_preview = [
+                    {
+                        "filename": tag["filename"],
+                        "type": tag["type"],
+                        "group": tag["group"]
+                    }
+                    for tag in st.session_state["photo_tags"]
+                ]
+                
+                # Build the complete prompt
+                complete_prompt = build_prompt(
+                    metadata=metadata,
+                    photo_tags=photo_tags_preview,
+                    transcript_text=st.session_state["transcript_text"]
+                )
+                
+                # Display the prompt in a code block for readability
+                st.code(complete_prompt, language="text")
         
-        # Build metadata dictionary from session state
-        # Handle "Other" selections by using the custom text input
-        final_retailer = (
-            st.session_state["retailer_other"] 
-            if st.session_state["retailer"] == "Other" 
-            else st.session_state["retailer"]
-        )
-        final_store_format = (
-            st.session_state["store_format_other"] 
-            if st.session_state["store_format"] == "Other" 
-            else st.session_state["store_format"]
-        )
-        final_shelf_location = (
-            st.session_state["shelf_location_other"] 
-            if st.session_state["shelf_location"] == "Other" 
-            else st.session_state["shelf_location"]
-        )
-        
-        metadata = {
-            "country": st.session_state["country"],
-            "city": st.session_state["city"],
-            "retailer": final_retailer,
-            "store_format": final_store_format,
-            "store_name": st.session_state["store_name"],
-            "shelf_location": final_shelf_location,
-            "currency": st.session_state["currency"],
-            "exchange_rate": EXCHANGE_RATES["GBP_TO_EUR"]
-        }
-        
-        # Get photo tags from session state (without the 'data' field for preview)
-        photo_tags_preview = [
-            {
-                "filename": tag["filename"],
-                "type": tag["type"],
-                "group": tag["group"]
-            }
-            for tag in st.session_state["photo_tags"]
-        ]
-        
-        # Build the complete prompt
-        complete_prompt = build_prompt(
-            metadata=metadata,
-            photo_tags=photo_tags_preview,
-            transcript_text=st.session_state["transcript_text"]
-        )
-        
-        # Display the prompt in a code block for readability
-        st.code(complete_prompt, language="text")
+        # Raw JSON Response
+        if "raw_response" in st.session_state and st.session_state["raw_response"]:
+            with st.expander("Raw JSON Response", expanded=True):
+                st.code(st.session_state["raw_response"], language="json")

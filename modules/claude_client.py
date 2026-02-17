@@ -54,8 +54,6 @@ def analyze_shelf(
     total_processed_bytes = 0
 
     for idx, photo in enumerate(photos, start=1):
-        st.write(f"Preparing photo {idx}/{len(photos)}: {photo['filename']}")
-
         # Text label for this photo
         photo_label = f"[Photo: {photo['filename']} | {photo['type']} | Group {photo['group']}]"
         content.append({"type": "text", "text": photo_label})
@@ -79,19 +77,8 @@ def analyze_shelf(
             }
         })
 
-    # Log image compression savings
-    if total_original_bytes > 0:
-        savings_pct = (1 - total_processed_bytes / total_original_bytes) * 100
-        orig_mb = total_original_bytes / (1024 * 1024)
-        proc_mb = total_processed_bytes / (1024 * 1024)
-        st.write(f"Image payload: {orig_mb:.1f} MB -> {proc_mb:.1f} MB ({savings_pct:.0f}% smaller)")
-
     # Append user prompt as final text block
     content.append({"type": "text", "text": user_prompt})
-
-    # Stream the API call with live phase indicators
-    status_text = st.empty()
-    status_text.write("Sending request to Claude...")
 
     start_time = time.time()
     collected_text = ""
@@ -107,14 +94,7 @@ def analyze_shelf(
             for event in stream:
                 event_type = getattr(event, "type", None)
 
-                if event_type == "content_block_start":
-                    block_type = getattr(event.content_block, "type", None)
-                    if block_type == "thinking":
-                        status_text.write("Claude is analyzing the photos...")
-                    elif block_type == "text":
-                        status_text.write("Generating structured data...")
-
-                elif event_type == "content_block_delta":
+                if event_type == "content_block_delta":
                     delta = event.delta
                     if getattr(delta, "type", None) == "text_delta":
                         collected_text += delta.text
@@ -122,7 +102,6 @@ def analyze_shelf(
             final_message = stream.get_final_message()
 
         elapsed = time.time() - start_time
-        status_text.write(f"API call completed in {elapsed:.1f}s")
 
         # Extract usage from the final message
         usage = {
@@ -142,13 +121,11 @@ def analyze_shelf(
 
         try:
             parsed_json = json.loads(response_text)
-            st.write(f"Parsed {len(parsed_json)} SKUs from response")
         except json.JSONDecodeError as e:
             error_msg = (
                 f"Claude returned invalid JSON. Parse error: {str(e)}\n\n"
                 f"Raw response text:\n{response_text}"
             )
-            st.error(error_msg)
             raise Exception(error_msg)
 
         return {
@@ -158,16 +135,10 @@ def analyze_shelf(
             "image_savings": {
                 "original_bytes": total_original_bytes,
                 "processed_bytes": total_processed_bytes,
-            }
+            },
+            "raw_response": response_text
         }
 
     except Exception as e:
-        elapsed = time.time() - start_time
-        status_text.write(f"Error after {elapsed:.1f}s")
-        if hasattr(e, "__class__") and "anthropic" in str(type(e)).lower():
-            error_msg = f"Anthropic API error: {str(e)}"
-            st.error(error_msg)
-            raise Exception(error_msg)
-        else:
-            st.error(f"Unexpected error: {str(e)}")
-            raise
+        # Re-raise the exception to be handled by the caller
+        raise
