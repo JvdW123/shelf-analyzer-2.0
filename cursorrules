@@ -1,0 +1,87 @@
+# Shelf Analyzer 2.0 — Cursor Rules
+
+## Project Overview
+This is a Streamlit web app that analyzes supermarket shelf photos using Claude Opus 4.6 Extended Thinking and generates formatted Excel reports. The user is a vibe coder (strategy consulting background, learning to code). Write clean, readable code and add brief comments explaining non-obvious logic.
+
+## Critical Design Principle
+The entire analysis happens in ONE prompt, ONE API call, ONE response. There is no multi-step prompting, no chaining, no loops. Keep it simple.
+
+## Tech Stack
+- Python 3.11+
+- Streamlit (web UI)
+- anthropic SDK (Claude API — Extended Thinking enabled)
+- openpyxl (Excel generation)
+- No other dependencies unless explicitly approved
+
+## Project Structure
+```
+shelf-analyzer-2.0/
+├── app.py                  # Streamlit UI only
+├── config.py               # ALL settings, dropdowns, constants
+├── modules/
+│   ├── __init__.py
+│   ├── claude_client.py    # ONE API call to Claude, parse JSON response
+│   ├── prompt_builder.py   # Assembles prompts from templates
+│   └── excel_generator.py  # JSON to formatted Excel
+├── prompts/
+│   ├── __init__.py
+│   └── shelf_analysis.py   # Prompt text (SYSTEM_PROMPT + ANALYSIS_PROMPT)
+├── docs/
+│   └── PRD.md              # Full product requirements
+├── .streamlit/
+│   └── secrets.toml        # Secrets (never committed)
+└── requirements.txt
+```
+
+## Coding Rules
+
+### 1. Separation of Concerns
+- `app.py` handles UI ONLY — no business logic, no API calls, no Excel generation
+- `config.py` holds ALL constants — dropdown values, exchange rates, column schema, API settings
+- Each module file has ONE job (see project structure above)
+- NEVER hardcode values in logic files — always import from config.py
+
+### 2. Code Style
+- Use descriptive variable names (e.g., `retailer_name` not `rn`)
+- Add brief inline comments for non-obvious logic
+- Use type hints on function signatures (e.g., `def build_prompt(metadata: dict) -> str:`)
+- Keep functions focused — one function does one thing
+- Use f-strings for string formatting
+- Maximum function length: ~50 lines. If longer, split into helpers.
+
+### 3. Error Handling
+- Wrap ALL external calls (API, file I/O) in try/except blocks
+- Show user-friendly error messages via `st.error()` — never show raw tracebacks
+- Always validate inputs before processing (check for None, empty strings, missing files)
+- Use `st.warning()` for non-critical issues, `st.error()` for blockers
+
+### 4. Streamlit Patterns
+- Use `st.session_state` to persist data between reruns
+- Use `st.secrets` for passwords and API keys (from .streamlit/secrets.toml)
+- Group related UI elements with `st.columns()` or `st.expander()`
+- Always use `st.spinner()` or `st.status()` for long-running operations
+
+### 5. Security
+- NEVER hardcode API keys, passwords, or secrets in code files
+- NEVER commit .streamlit/secrets.toml to Git
+- Access secrets via `st.secrets["key_name"]` only
+
+### 6. When Modifying Existing Files
+- Read the full file before making changes
+- Preserve existing functionality — do not remove or break working code
+- If refactoring, explain what changed and why in a comment
+
+## Reference: Key Specifications
+- Full product requirements: see `docs/PRD.md`
+- Data schema: 32 columns (exact order and types defined in PRD Section 6)
+- Column 7 is "Shelf Location" — user-provided via dropdown, NOT AI-detected
+- Claude API model: `claude-opus-4-6` with Extended Thinking enabled
+- Excel formatting: blue headers, alternating rows, formulas for Price per Liter (details in PRD Section 7)
+
+## What NOT To Do
+- Do NOT install packages not in requirements.txt without asking
+- Do NOT create new files outside the defined structure without asking
+- Do NOT use global variables — pass data through function arguments
+- Do NOT use bare `except:` — always catch specific exceptions
+- Do NOT put UI code in module files or business logic in app.py
+- Do NOT add multi-step prompting or API call chaining — ONE call only
