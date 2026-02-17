@@ -102,10 +102,10 @@ PHOTO_TYPES = ["Overview", "Close-up"]
 # Settings for Claude Opus 4.6 Extended Thinking API calls
 CLAUDE_CONFIG = {
     "model": "claude-opus-4-6",
-    "max_tokens": 16000,
+    "max_tokens": 64000,  # Maximum capacity - handles 140+ SKUs
     "thinking": {
         "type": "enabled",
-        "budget_tokens": 10000
+        "budget_tokens": 10000  # Balanced thinking for good speed and accuracy
     }
 }
 
