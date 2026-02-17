@@ -280,3 +280,62 @@ st.divider()
 # Analyze button (disabled for now — will be connected in Phase 3)
 st.button("Analyze Shelf", disabled=True, type="primary")
 st.info("Analysis will be connected in Phase 3.")
+
+# ==============================================================================
+# TEMPORARY DEBUG SECTION — Preview Prompt
+# ==============================================================================
+# TEMPORARY — remove after Phase 2 testing
+
+if uploaded_photos:
+    with st.expander("Debug: Preview Prompt"):
+        from modules.prompt_builder import build_prompt
+        from config import EXCHANGE_RATES
+        
+        # Build metadata dictionary from session state
+        # Handle "Other" selections by using the custom text input
+        final_retailer = (
+            st.session_state["retailer_other"] 
+            if st.session_state["retailer"] == "Other" 
+            else st.session_state["retailer"]
+        )
+        final_store_format = (
+            st.session_state["store_format_other"] 
+            if st.session_state["store_format"] == "Other" 
+            else st.session_state["store_format"]
+        )
+        final_shelf_location = (
+            st.session_state["shelf_location_other"] 
+            if st.session_state["shelf_location"] == "Other" 
+            else st.session_state["shelf_location"]
+        )
+        
+        metadata = {
+            "country": st.session_state["country"],
+            "city": st.session_state["city"],
+            "retailer": final_retailer,
+            "store_format": final_store_format,
+            "store_name": st.session_state["store_name"],
+            "shelf_location": final_shelf_location,
+            "currency": st.session_state["currency"],
+            "exchange_rate": EXCHANGE_RATES["GBP_TO_EUR"]
+        }
+        
+        # Get photo tags from session state (without the 'data' field for preview)
+        photo_tags_preview = [
+            {
+                "filename": tag["filename"],
+                "type": tag["type"],
+                "group": tag["group"]
+            }
+            for tag in st.session_state["photo_tags"]
+        ]
+        
+        # Build the complete prompt
+        complete_prompt = build_prompt(
+            metadata=metadata,
+            photo_tags=photo_tags_preview,
+            transcript_text=st.session_state["transcript_text"]
+        )
+        
+        # Display the prompt in a code block for readability
+        st.code(complete_prompt, language="text")
