@@ -32,200 +32,98 @@ ANALYSIS_PROMPT = """
 
 ---
 
-## STEP 1: ANALYZE PHOTOS
+STEP 1: ANALYZE PHOTOS
 
-Photos are the PRIMARY SOURCE — every data point must be visually verifiable.
+Photos are the primary source — every data point you extract must be visually verifiable in the photos.
 
-### Overview vs. Close-up Photos
-Each photo is tagged with a type and group number:
-- Type: "Overview" (full shelf/fridge view) or "Close-up" (detailed section)
-- Group: A number (1, 2, 3...) indicating which fridge/shelf section it belongs to
+Overview vs. close-up photos: The photo set will always include one or more overview shots of the entire shelf plus close-up photos of specific sections. Overview photos: Use these to understand the full shelf layout, count total SKUs, and prevent duplicate entries. Overview photos are your reference for what exists on the shelf. Close-up photos: Use these to extract detailed SKU data (brand, flavor, claims, price, ml). Close-ups provide the clearest view of labels and price tags.
 
-Close-ups with the same group number belong to the same shelf section as their matching Overview. Use this grouping to:
-1. Match close-ups to their overview for deduplication
-2. Ensure SKUs from Close-up Group 1 are only checked against Overview Group 1
-3. Assign the correct Fridge Number based on the group
+Critical rule — each SKU is recorded only ONCE: A single SKU may appear in multiple photos (e.g., in an overview AND a close-up, or at the edge of two adjacent close-ups). Always record each unique SKU only once. Record it under the photo where it is most clearly visible — typically a close-up photo. Use the overview photo(s) to verify you haven't counted the same SKU twice. Look for: price labels, brand logos, flavor descriptions, volume/ml markings, claims text, and packaging type.
 
-### Critical Rule — Each SKU Recorded Only ONCE
-A single SKU may appear in multiple photos (overview AND close-up, or at edges of adjacent close-ups). Always record each unique SKU only once, under the photo where it is most clearly visible (typically a close-up). Use overview photo(s) to verify no duplicates.
+Use price tags to validate SKU data: The shelf price tag (usually below the product) often contains structured product information including brand, product name, and volume. Cross-reference this with the product label to ensure accuracy.
 
-### What to Look For
-- Price labels (usually below the product on the shelf edge)
-- Brand logos
-- Flavor descriptions
-- Volume/ml markings
-- Claims text (health claims, certifications)
-- Packaging type
+How to count facings and distinguish SKUs — step by step: Start by counting bottle caps: Look at the top of the shelf row and count the number of bottle caps (or package tops) visible in a horizontal line. Each cap represents one bottle in the front row. Only count the front row: Be careful with photo angles — you may see bottles behind the front row (depth). Ignore these. Only count bottles that are directly next to each other in the front-facing row. Check the color beneath each cap: For each bottle cap, look at the color of the liquid inside (or the packaging color if not transparent). Same color as neighbor = same SKU → count as another facing. Different color than neighbor = different SKU → record as a new line item in Excel. Identify gaps: If you see an empty space or a very dark gap between bottles, this may indicate an out-of-stock item (see out-of-stock bullet below). Verify with labels and price tags: Once you've identified distinct SKUs by cap + color, confirm your identification by reading the product labels and price tags where visible. Example: You see 6 bottle caps in a row. Caps 1-3 have orange liquid beneath them, cap 4 has green liquid, caps 5-6 have orange liquid again. This means: Caps 1-3 = SKU A with 3 facings. Cap 4 = SKU B with 1 facing. Caps 5-6 = check if same orange as caps 1-3. If yes, SKU A has 5 total facings. If slightly different shade/label, it may be SKU C with 2 facings. Multi-packs: Record a multi-pack (e.g., 6-pack of shots) as 1 SKU with 1 facing. The multi-pack is the unit. Count the number of shelf levels (horizontal planks/rows) visible across all photos. Out-of-stock gaps: When counting caps and colors, if you encounter an empty space (no cap visible), a very dark gap, or a visible price tag with no product above it, this is an out-of-stock slot. Record a row for this SKU using information from the price tag and mark Stock Status as "Out of Stock".
 
-### Price Tag Cross-Referencing
-Shelf price tags often contain structured product info (brand, product name, volume). Cross-reference price tags with product labels to ensure accuracy.
+STEP 2: MATCH TRANSCRIPT TO PHOTOS
 
-### How to Count Facings — Step by Step
-1. Count bottle caps/tops: Look at the top of the shelf row. Each cap = one bottle in the front row.
-2. Only count the front row: Ignore bottles behind the front row (depth).
-3. Check the color beneath each cap:
-   - Same color as neighbor = same SKU = another facing
-   - Different color = different SKU = new line item
-4. Identify gaps: Empty space or dark gap = potential out-of-stock slot.
-5. Verify with labels and price tags: Confirm groupings by reading labels.
+Read the full transcript and identify references to what I describe seeing. I don't always say "Photo 3" — I may say "here I see", "on the left", "top shelf", etc. Use photo file names as context clues — they often contain the shelf location (e.g., "foto_4c_left_side_juice_shelf_dairy_section"). Treat transcript information as supplementary: it can confirm or add detail (flavor, price, processing method) but photos override if there is a conflict. Processing method: The transcript will often mention which brands or specific SKUs are cold-pressed vs. pasteurised. Extract this information from the transcript and apply it to the relevant SKUs.
 
-Example: 6 bottle caps in a row. Caps 1-3 orange liquid, cap 4 green, caps 5-6 orange.
-- Caps 1-3 = SKU A, 3 facings
-- Cap 4 = SKU B, 1 facing
-- Caps 5-6 = Check if same as 1-3. If yes, SKU A has 5 total. If different, SKU C, 2 facings.
+STEP 3: DATA EXTRACTION PER SKU
 
-### Multi-Packs
-A multi-pack (e.g., 6-pack of shots) = 1 SKU with 1 facing. The multi-pack is the unit.
+Process photos ONE AT A TIME in strict sequence: List all photo file names you received at the start (e.g., foto_1.jpg, foto_2.jpg, foto_4.jpg, foto_4a.jpg, foto_4b.jpg, foto_4c.jpg). Start with the first photo in your list. Extract ALL SKUs visible in that photo before moving to the next photo. For EVERY row from that photo, enter the EXACT file name in the "Photo" column — copy the file name precisely, do not paraphrase or shorten it. Complete all SKUs from photo 1, then move to photo 2. Repeat until all photos are processed. Then do deduplication: Use overview photos to identify and remove any duplicate SKUs that appeared in multiple close-ups (keep the entry from the clearest photo). Critical: The Photo column in each Excel row must exactly match the file name of the photo you extracted that SKU from. Do not mix file names across SKUs from different photos. Reminder: Record each unique SKU only ONCE. After processing all photos sequentially, use overview photos to check for duplicates. If an SKU appeared in multiple photos, keep only the entry from the photo where it was clearest and delete the duplicate rows.
 
-### Shelf Levels
-Count total horizontal shelf levels (planks/rows) visible across all photos.
+For every unique SKU visible in the photos, capture the following fields in this exact order:
 
-### Out-of-Stock Detection
-Empty space, dark gap, or price tag with no product above it = out-of-stock slot. Record using price tag info and set Stock Status to "Out of Stock".
+Column | Source | Description
+1 Country | Metadata | Country where the store is located
+2 Retailer | Metadata | Retailer/chain name (e.g., Albert Heijn, Jumbo)
+3 Store Name | Metadata | Specific store location identifier
+4 City | Metadata | City where the store is located
+5 Store Format | Metadata | Type of store (Hypermarket, Supermarket, Convenience, Discount, Express)
+6 Photo | Photo | The EXACT original file name of the photo you extracted this SKU from. Copy the file name precisely (e.g., "foto_4a_left_side_juice_shelf.jpg"). Do not paraphrase, shorten, or mix up file names between photos.
+7 Shelf Location | Metadata | Where in the store is this shelf? (e.g., Juice Aisle — Chilled, Dairy Section — Chilled, Health Food Section)
+8 Shelf Levels | Visual count | Total number of horizontal shelf levels across the entire shelf section
+9 Shelf Level | Visual | Which shelf level is this SKU on? Use numbered position from the top: 1st, 2nd, 3rd, 4th, etc. For shelves with ≤3 levels, Top / Middle / Bottom is also acceptable.
+10 Product Type | Visual + transcript | Classify into: Pure Juices / Smoothies / Shots / Other (e.g., RTD Coffee, Protein Drinks, Coconut Water)
+11 Need State | AI assessment based on label + ingredients | Within Pure Juices and Smoothies, classify as: Indulgence (consumed primarily for taste) or Functional (has health benefit: e.g., added vitamins, protein, fiber, chia, probiotics, superfoods, etc.). Shots are almost always Functional. Base this on visible label claims, health-focused messaging, and special ingredients mentioned. If unclear, default to Indulgence.
+12 Brand | Visual + transcript | Parent brand name (e.g., Innocent, CoolBest, Healthy People, AH)
+13 Sub-brand | Visual + transcript | Sub-brand or product line if applicable (e.g., "Biologisch" for AH Biologisch, "Plus" for Innocent Plus, "Protein" for CoolBest Protein). Leave blank if no sub-brand.
+14 Product Name | Visual (label) | The LARGEST marketing/variant name printed on the FRONT of the label (e.g., "Gorgeous Greens", "Tropical", "Ginger Shot"). See PRODUCT NAME VS FLAVOR rules below.
+15 Branded/Private Label | Visual | "Branded" or "Private Label" — identify PL by retailer branding (e.g., AH logo = Private Label)
+16 Flavor | Visual (label) + transcript | The fruit/ingredient composition, usually in SMALLER text below the product name (e.g., "Apple, Kiwi & Cucumber", "Strawberry Banana", "Mango Passion Fruit"). See PRODUCT NAME VS FLAVOR rules below.
+17 Facings | Visual count | Number of identical products in the front row (side-by-side). Count by identifying bottle caps, then verify by color. Only count front row — ignore bottles behind. Same cap + same color = same SKU.
+18 Price (EUR) | Price label | Shelf price in EUR (e.g., 3.49). Leave blank if not visible.
+19 Packaging Size (ml) | Visual (label) | Volume in milliliters (e.g., 100, 250, 330, 750, 900, 1000, 1500). Leave blank if not visible.
+20 Price per Liter (EUR) | Calculated | = Price / (Packaging Size / 1000). Leave blank if price or ml is unknown. Use an Excel formula, not a hardcoded value.
+21 Packaging Type | Visual | PET bottle / Glass bottle / Tetra Pak / Can / Pouch / Cup
+22 Juice Extraction Method | Transcript + label | How the juice was extracted. Use ONLY one of these values: Cold Pressed / Squeezed / From Concentrate / NA/Centrifugal. "Cold Pressed" = juice extracted using hydraulic press or slow press methods (often stated on label). "Squeezed" = juice extracted by squeezing (e.g., freshly squeezed citrus, or label says "squeezed"/"geperst"). "From Concentrate" = reconstituted from concentrate (label says "from concentrate" or "made from concentrate"). "NA/Centrifugal" = default for all other juices where extraction method is not specified, or where standard centrifugal extraction is used (this covers NFC/direct juice and any product where the method is not explicitly stated). If you cannot determine the extraction method from label or transcript, use "NA/Centrifugal".
+23 Processing Method | Transcript + label | How the juice is preserved. Use ONLY one of these values: HPP / Pasteurised / Raw. "HPP" = High Pressure Processing (often mentioned on label or in transcript). "Pasteurised" = heat-treated / flash-pasteurised / thermally processed. "Raw" = no processing applied, sold as raw/unpasteurised. If you cannot determine the processing method from label or transcript, use "Pasteurised" as the default (since the vast majority of commercially sold juices are pasteurised). Use British spelling: "Pasteurised" not "Pasteurized".
+24 HPP Treatment | Transcript + label | Yes / No / Unknown. HPP (High Pressure Processing) is often mentioned on label or in transcript.
+25 Claims | Visual (label) | Any claims visible on the packaging: e.g., "100% juice", "No added sugar", "Protein 20g", "Vitamins", "Organic", "Vegan", "Superfood", "Energy", "Kids", "Immunity", "Probiotics", "Fiber". Comma-separated. Leave blank if none visible.
+26 Bonus/Promotions | Visual (shelf label/sticker) | Record any promotional activity visible: e.g., "25% korting", "1+1 gratis", "2 voor €5", "2e halve prijs". Free text. Leave blank if no promotion.
+27 Stock Status | Visual | "In Stock" or "Out of Stock". Mark as Out of Stock if you see an empty gap (no bottle cap), a dark space, or a price tag with no product above it.
+28 Confidence Score | Your assessment | 100% = clearly visible and certain / 80% = mostly clear / 60% = partially visible, inferred / 40% = uncertain, low visibility
+29 Notes | Any source | Free text for context: "price not fully visible", "transcript confirms flavor", "reflection obscures label", "conflict between transcript and photo — photo used", "also visible in photo X"
 
----
+PRODUCT NAME VS FLAVOR — How to distinguish (critical):
 
-## STEP 2: USE TRANSCRIPT (if provided)
-
-If a transcript is provided above, it contains a voice description of the shelf.
-
-- Read the full transcript and identify references to brands, flavors, prices, processing methods, and shelf layout.
-- The narrator may say "here I see", "on the left", "top shelf", etc. Map these to the photos.
-- Transcript is SUPPLEMENTARY: It can confirm or add detail but PHOTOS OVERRIDE if there is a conflict.
-- Processing method and HPP: The transcript often mentions which brands/SKUs are cold-pressed, HPP, pasteurized, etc. Extract this and apply to relevant SKUs.
-- If no transcript is provided, skip this step.
-
----
-
-## STEP 3: DATA EXTRACTION PER SKU
-
-### Processing Order
-1. List all photo file names received
-2. Start with the first photo, extract ALL SKUs before moving to the next
-3. For EVERY row, use the EXACT file name in the Photo column
-4. Complete all photos sequentially
-5. Then DEDUPLICATE within each group using overview photos, then across groups
-
-### Column Schema — 24 AI-Provided Columns
-
-IMPORTANT: Do NOT include Country, City, Retailer, Store Format, Store Name, Shelf Location, Currency, or Price per Liter in your JSON output. These are added automatically by the app from the metadata above.
-
-| # | Column | Type | Source | Allowed Values |
-|---|--------|------|--------|----------------|
-| 1 | Photo | text | Filename | EXACT original filename |
-| 2 | Shelf Levels | integer | Visual count | Numeric |
-| 3 | Shelf Level | text | Visual | FIXED: 1st / 2nd / 3rd / 4th / 5th / 6th |
-| 4 | Product Type | text | Visual + transcript | FIXED: Pure Juices / Smoothies / Shots / Other |
-| 5 | Branded/Private Label | text | Visual | FIXED: Branded / Private Label |
-| 6 | Brand | text | Visual + transcript | Free text |
-| 7 | Sub-brand | text | Visual + transcript | Free text (blank if none) |
-| 8 | Product Name | text | Visual (label) | Free text — see NAMING RULES |
-| 9 | Flavor | text | Visual (label) | Free text — see NAMING RULES |
-| 10 | Facings | integer | Visual count | Numeric (front row only) |
-| 11 | Price (Local Currency) | float | Price label | Numeric (null if not visible) |
-| 12 | Price (EUR) | float | Calculated | Numeric (null if no local price) |
-| 13 | Packaging Size (ml) | integer | Visual (label) | Numeric (null if not visible) |
-| 14 | Need State | text | AI assessment | FIXED: Indulgence / Functional |
-| 15 | Juice Extraction Method | text | Visual + transcript | FIXED: Squeezed / Cold Pressed / From Concentrate (null if unknown) |
-| 16 | Processing Method | text | Visual + transcript | FIXED: Pasteurized / HPP (null if unknown) |
-| 17 | HPP Treatment | text | Visual + transcript | FIXED: Yes / No (null if unknown) |
-| 18 | Packaging Type | text | Visual | FIXED: PET Bottle / Tetra Pak / Can / Carton / Glass Bottle |
-| 19 | Claims | text | Visual (label) | Free text, comma-separated (null if none) |
-| 20 | Bonus/Promotions | text | Visual (shelf) | Free text (null if none) |
-| 21 | Stock Status | text | Visual | FIXED: In Stock / Out of Stock |
-| 22 | Est. Linear Meters | float | AI estimation | Numeric |
-| 23 | Fridge Number | text | Visual / Metadata | Free text |
-| 24 | Confidence Score | integer | AI assessment | 0-100 |
-
----
-
-## PRODUCT NAME VS FLAVOR — How to Distinguish (Critical)
-
-Product Name = the LARGEST marketing/variant name on the FRONT of the label.
-Flavor = the fruit/ingredient composition, usually SMALLER text below the product name.
+product_name = the LARGEST marketing/variant name printed on the FRONT of the label.
+flavor = the fruit/ingredient composition, usually in SMALLER text below the product name.
 
 Examples:
-- Innocent: "Gorgeous Greens" (large) + "Apple, Kiwi and Cucumber" (small) => Product Name: "Gorgeous Greens", Flavor: "Apple, Kiwi and Cucumber"
-- AH juice: Only "Sinaasappel" on label => Product Name: "Sinaasappel", Flavor: "Sinaasappel"
-- Tropicana: "Tropical" (large) + "Mango, Pineapple and Passion Fruit" (small) => Product Name: "Tropical", Flavor: "Mango, Pineapple and Passion Fruit"
-- Ginger shot: "Ginger Shot" only => Product Name: "Ginger Shot", Flavor: "Ginger"
+Innocent bottle: "Gorgeous Greens" in large text, "Apple, Kiwi & Cucumber" in small text below → product_name: "Gorgeous Greens", flavor: "Apple, Kiwi & Cucumber"
+Albert Heijn juice: only "Sinaasappel" on the label, no sub-text → product_name: "Sinaasappel", flavor: "Sinaasappel"
+Tropicana: "Tropical" in big text, "Mango, Pineapple & Passion Fruit" underneath → product_name: "Tropical", flavor: "Mango, Pineapple & Passion Fruit"
+G'nger shot: "Ginger Shot" with no sub-description → product_name: "Ginger Shot", flavor: "Ginger"
+Innocent smoothie: "Strawberry & Banana" is both the marketing name and the flavor → product_name: "Strawberry & Banana", flavor: "Strawberry & Banana"
 
-Rule: If no separate ingredient description below the marketing name, set Flavor = Product Name.
+Rule: If the product has NO separate ingredient description below the marketing name, set flavor = product_name.
 
----
+STEP 4: EXCEL FORMATTING
 
-## NEED STATE CLASSIFICATION
+Single sheet output: "SKU Data"
+Structure: One continuous table with all SKUs. All rows from the same photo should be grouped together sequentially (all SKUs from photo 1, then all from photo 2, etc.).
+Columns: The 29 columns listed above in exact order (Country, Retailer, Store Name, City, Store Format, Photo, Shelf Location, Shelf Levels, Shelf Level, Product Type, Need State, Brand, Sub-brand, Product Name, Branded/Private Label, Flavor, Facings, Price (EUR), Packaging Size (ml), Price per Liter (EUR), Packaging Type, Juice Extraction Method, Processing Method, HPP Treatment, Claims, Bonus/Promotions, Stock Status, Confidence Score, Notes).
+Do NOT embed photos: The Photo column contains only the file name as text reference, not the actual image.
+Verify file names: Before finalizing, check that each group of SKUs has the correct photo file name — the name should match the photo from which those SKUs were extracted.
+Conditional formatting: Confidence Score: Green fill (≥75%) / Yellow fill (55–74%) / Red fill (<55%). Stock Status: Red fill + bold red text for "Out of Stock" rows. Price per Liter column: Use an Excel formula (e.g., =S2/(T2/1000) where S is Price EUR and T is Packaging Size ml) so it recalculates if price or ml is updated. Do not hardcode calculated values.
+Row heights: Fixed at 20 pixels for all data rows. Header row at 30 pixels.
+Text wrapping: Disabled for all cells (both header and data rows).
+Language: All column headers, segment names, and data entries in English.
+Clean, table-style formatting: Professional font (Arial, 10pt). Blue header row with white text. Thin borders on all cells. Alternating row shading (light grey every other row) for readability.
+Freeze panes: Freeze the header row (row 1) so it stays visible when scrolling.
 
-AI assessment based on visible label information.
+STEP 5: QUALITY CHECKS
 
-Functional (health benefit or functional positioning):
-- Added vitamins/minerals, protein, fiber, probiotics, superfoods
-- Health messaging: "boost", "immunity", "energy", "detox"
-- Functional ingredients: ginger, turmeric, chia, spirulina, wheatgrass
-- Shots are almost always Functional
+Deduplication Check (Critical)
 
-Indulgence (consumed primarily for taste):
-- Emphasis on taste and flavor, classic fruit combinations
-- "Pure", "100% fruit" without functional additives
-- No health claims beyond basic fruit content
+Each unique SKU must appear only ONCE in the Excel — even if it is visible in multiple photos. Why duplicates happen: The same SKU often appears in multiple photos: In both an overview photo AND a close-up photo. At the edge of two adjacent close-up photos. In multiple overview photos taken from different angles. How to prevent duplicates: Start with the overview photo(s) to understand the full shelf layout and identify all unique SKUs present. Map each close-up photo to its position within the overview (e.g., "Close-up 4a covers the right third of overview photo 4"). For each unique SKU, determine which photo shows it most clearly — this is typically a close-up photo where the label and price tag are readable. Record the SKU only once, under the photo where it is clearest. Use the "Photo" column to indicate which photo you extracted the data from. In the Notes column, you may add "Also visible in photo X" for traceability, but do NOT create a second row. Use close-ups for data extraction, overviews for validation: Extract detailed SKU information (brand, flavor, claims, price, ml) from close-up photos where labels are clearest. Use overview photos to cross-check that you haven't missed any SKUs and haven't counted any SKU twice. Facings count: The facings count should reflect the total number of facings for that SKU on the shelf — as seen in the overview photo. Do not sum facings from multiple close-ups.
 
-When in doubt, default to Indulgence.
+General Quality Checks
 
----
+Double-check each SKU against both label AND price tag: For every SKU entry, validate the data by cross-referencing two sources: Product label (on the bottle/pack itself): Brand logo, flavor name, volume, claims. Price tag (shelf label below the product): Often contains structured product info including brand name, product name, and volume in ml. Use both sources to confirm: (a) the brand is correct, (b) the flavor/product name is accurate, and (c) the packaging size matches. If there is a discrepancy between label and price tag, note it in the Notes column and use the most reliable source. Photos are the primary source: Only include data that is clearly visible in the photos. Minimum confidence for inclusion = 60%. Uncertainties: If something is not clearly visible due to photo angle, shadow, reflection, or distance — assign a lower confidence score and note the issue. Transcript conflicts: If the transcript says something different from what the photo shows → the photo wins. Note the conflict in the Notes column. Missing information: Leave the field blank or use the appropriate default value. Do not guess or fabricate data. Juice Extraction Method: If you cannot determine from label or transcript, default to "NA/Centrifugal". Processing Method: If you cannot determine from label or transcript, default to "Pasteurised". Use British spelling: "Pasteurised" not "Pasteurized". HPP Treatment: If you cannot determine from label or transcript, mark as "Unknown". Product Type classification: If a product could fit multiple segments (e.g., a protein smoothie), classify by the primary positioning visible on the label. Use Need State to capture the functional aspect. Need State classification (Indulgence vs. Functional): This is an AI assessment. Look for: Functional indicators: Health claims on label, added vitamins/minerals, protein content, fiber, probiotics, superfoods, "boost", "immunity", "energy", functional ingredients like ginger, turmeric, chia, spirulina. Indulgence indicators: Emphasis on taste, fruit imagery, no health claims, classic flavor combinations, "pure", "100% fruit" without added functional ingredients. When in doubt, default to Indulgence. Price per liter: Must be an Excel formula, not a hardcoded number. Verify that the formula references the correct price and ml cells. Do not count depth: Only count bottles in the front row. Photo angles may show bottles stacked behind the front row — ignore these. Facings = horizontal count of front-row bottles only.
 
-## STEP 4: OUTPUT FORMAT
+OUTPUT
 
-Return your analysis as a JSON array. Each element = one SKU row.
-
-JSON Rules:
-- Use null for fields where data is not visible or cannot be determined
-- For FIXED columns, use ONLY the exact allowed values listed above
-- Do NOT invent or fabricate data
-- Price per Liter: always return null (calculated as Excel formula in the app)
-- Photo field: EXACT filename
-- Group SKUs from the same photo together sequentially
-- Return ONLY the JSON array. No additional text, explanation, or markdown around it.
-
-Example row (note: no country/city/retailer/store_format/store_name/shelf_location/currency/price_per_liter_eur):
-{{"photo": "foto_4a_left_side.jpg", "shelf_levels": 4, "shelf_level": "2nd", "product_type": "Smoothies", "branded_private_label": "Branded", "brand": "Innocent", "sub_brand": "", "product_name": "Gorgeous Greens", "flavor": "Apple, Kiwi and Cucumber", "facings": 3, "price_local": 3.50, "price_eur": 4.10, "packaging_size_ml": 750, "need_state": "Functional", "juice_extraction_method": "Squeezed", "processing_method": "Pasteurized", "hpp_treatment": "No", "packaging_type": "PET Bottle", "claims": "No added sugar, Never from concentrate", "bonus_promotions": null, "stock_status": "In Stock", "est_linear_meters": 0.25, "fridge_number": "Fridge 1", "confidence_score": 85}}
-
-Return ONLY the JSON array. No text before or after it.
-
----
-
-## STEP 5: QUALITY CHECKS
-
-Deduplication (Critical):
-- Each unique SKU appears only ONCE, even if in multiple photos.
-- Deduplicate within each photo group first (using the overview), then across groups.
-- Record each SKU under the clearest photo only.
-- Facings = total across shelf (from overview), not per close-up.
-
-Cross-Referencing:
-- Validate every SKU against BOTH product label AND price tag.
-
-Confidence Scoring:
-- 90-100: Clearly visible, all data certain
-- 70-89: Mostly clear, minor uncertainty on 1-2 fields
-- 50-69: Partially visible, some inference required
-- Below 50: Do NOT include
-
-General Rules:
-- Photos override transcript if conflict exists.
-- null for undetermined fields. Do not guess.
-- Fixed columns: ONLY exact allowed values.
-- Front-row bottles only for facings.
-- Multi-packs = 1 SKU, 1 facing.
-
-FIXED VALUE REFERENCE:
-Shelf Level: 1st, 2nd, 3rd, 4th, 5th, 6th
-Product Type: Pure Juices, Smoothies, Shots, Other
-Branded/Private Label: Branded, Private Label
-Currency: GBP, EUR
-Need State: Indulgence, Functional
-Juice Extraction Method: Squeezed, Cold Pressed, From Concentrate
-Processing Method: Pasteurized, HPP
-HPP Treatment: Yes, No
-Packaging Type: PET Bottle, Tetra Pak, Can, Carton, Glass Bottle
-Stock Status: In Stock, Out of Stock
+An Excel file (.xlsx) containing a single sheet named "SKU Data" with: Row 1: Column headers (the 29 columns in the exact order listed above). Row 2+: One row per unique SKU. No photo-block headers, no empty rows between photos. All SKUs from the same photo grouped together sequentially. Conditional formatting applied (confidence scores color-coded, out-of-stock rows highlighted). Price per Liter as an Excel formula. Fixed row heights (20px for data, 30px for header). Text wrapping disabled. Frozen header row.
 """
