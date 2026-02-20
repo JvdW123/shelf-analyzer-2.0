@@ -12,6 +12,7 @@ Returns both the parsed SKU data and token usage statistics.
 
 import base64
 import json
+import re
 import time
 import streamlit as st
 from anthropic import Anthropic
@@ -109,8 +110,9 @@ def analyze_shelf(
             "output_tokens": final_message.usage.output_tokens,
         }
 
-        # Parse the collected text as JSON
         response_text = collected_text.strip()
+
+        # Strip markdown code fences if present
         if response_text.startswith("```json"):
             response_text = response_text[7:]
         if response_text.startswith("```"):
@@ -119,12 +121,24 @@ def analyze_shelf(
             response_text = response_text[:-3]
         response_text = response_text.strip()
 
+        # Try direct parse first
+        parsed_json = None
         try:
             parsed_json = json.loads(response_text)
-        except json.JSONDecodeError as e:
+        except json.JSONDecodeError:
+            # Fallback: extract the JSON array from surrounding text
+            match = re.search(r'\[.*\]', response_text, re.DOTALL)
+            if match:
+                try:
+                    parsed_json = json.loads(match.group(0))
+                except json.JSONDecodeError:
+                    pass
+
+        if parsed_json is None:
+            preview = response_text[:500] if len(response_text) > 500 else response_text
             error_msg = (
-                f"Claude returned invalid JSON. Parse error: {str(e)}\n\n"
-                f"Raw response text:\n{response_text}"
+                f"Claude returned invalid JSON. Could not parse a JSON array from the response.\n\n"
+                f"Raw response preview:\n{preview}"
             )
             raise Exception(error_msg)
 

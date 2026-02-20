@@ -8,7 +8,9 @@ This file contains the complete UI:
 - Transcript upload
 """
 
+import io
 import streamlit as st
+from PIL import Image
 from config import (
     COUNTRIES,
     RETAILERS,
@@ -212,15 +214,33 @@ if uploaded_photos:
     photo_tags = []
     
     for i, photo in enumerate(uploaded_photos):
-        # Create a 3-column layout for each photo
+        rot_key = f"rotation_{i}"
+        if rot_key not in st.session_state:
+            st.session_state[rot_key] = 0
+
+        img = Image.open(io.BytesIO(photo.getvalue()))
+        angle = st.session_state[rot_key]
+        if angle != 0:
+            img = img.rotate(-angle, expand=True)
+
         col1, col2, col3 = st.columns([1, 2, 2])
         
         with col1:
-            # Display thumbnail (column 1)
-            st.image(photo, width=150)
+            preview_buf = io.BytesIO()
+            img.convert("RGB").save(preview_buf, format="JPEG")
+            st.image(preview_buf.getvalue(), width=150)
+
+            b1, b2 = st.columns(2)
+            with b1:
+                if st.button("\u21BA", key=f"rot_ccw_{i}", help="Rotate counter-clockwise"):
+                    st.session_state[rot_key] = (st.session_state[rot_key] - 90) % 360
+                    st.rerun()
+            with b2:
+                if st.button("\u21BB", key=f"rot_cw_{i}", help="Rotate clockwise"):
+                    st.session_state[rot_key] = (st.session_state[rot_key] + 90) % 360
+                    st.rerun()
         
         with col2:
-            # Photo type dropdown (column 2)
             photo_type = st.selectbox(
                 "Photo Type",
                 options=PHOTO_TYPES,
@@ -229,7 +249,6 @@ if uploaded_photos:
             )
         
         with col3:
-            # Group number input (column 3)
             group_number = st.number_input(
                 "Group",
                 min_value=1,
@@ -239,12 +258,13 @@ if uploaded_photos:
                 label_visibility="visible" if i == 0 else "collapsed"
             )
         
-        # Store this photo's metadata
+        rotated_buf = io.BytesIO()
+        img.convert("RGB").save(rotated_buf, format="JPEG", quality=95)
         photo_tags.append({
             "filename": photo.name,
             "type": photo_type,
             "group": group_number,
-            "data": photo.getvalue()  # Store the actual file bytes
+            "data": rotated_buf.getvalue()
         })
     
     # Update session state with all photo tags
