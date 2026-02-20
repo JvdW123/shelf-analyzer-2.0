@@ -263,7 +263,8 @@ def generate_excel(skus: list[dict], metadata: dict) -> bytes:
         "Stock Status": 15,
         "Est. Linear Meters": 18,
         "Fridge Number": 15,
-        "Confidence Score": 16
+        "Confidence Score": 16,
+        "Notes": 40
     }
     
     # Apply column widths

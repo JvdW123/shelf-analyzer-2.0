@@ -172,7 +172,8 @@ COLUMN_SCHEMA = [
     {"name": "Stock Status", "key": "stock_status", "type": "text"},
     {"name": "Est. Linear Meters", "key": "est_linear_meters", "type": "float"},
     {"name": "Fridge Number", "key": "fridge_number", "type": "text"},
-    {"name": "Confidence Score", "key": "confidence_score", "type": "integer"}
+    {"name": "Confidence Score", "key": "confidence_score", "type": "integer"},
+    {"name": "Notes", "key": "notes", "type": "text"}
 ]
 
 # ==============================================================================
