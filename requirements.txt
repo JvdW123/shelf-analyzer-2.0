@@ -2,3 +2,4 @@ streamlit
 anthropic
 openpyxl
 Pillow
+pandas
