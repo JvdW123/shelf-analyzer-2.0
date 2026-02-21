@@ -223,40 +223,37 @@ if uploaded_photos:
         if angle != 0:
             img = img.rotate(-angle, expand=True)
 
-        col1, col2, col3 = st.columns([1, 2, 2])
-        
-        with col1:
-            preview_buf = io.BytesIO()
-            img.convert("RGB").save(preview_buf, format="JPEG")
-            st.image(preview_buf.getvalue(), width=150)
+        preview_buf = io.BytesIO()
+        img.convert("RGB").save(preview_buf, format="JPEG")
+        st.image(preview_buf.getvalue(), use_container_width=True)
 
-            b1, b2 = st.columns(2)
-            with b1:
+        ctrl_rot, ctrl_type, ctrl_group = st.columns([1, 2, 1])
+        with ctrl_rot:
+            r1, r2 = st.columns(2)
+            with r1:
                 if st.button("\u21BA", key=f"rot_ccw_{i}", help="Rotate counter-clockwise"):
                     st.session_state[rot_key] = (st.session_state[rot_key] - 90) % 360
                     st.rerun()
-            with b2:
+            with r2:
                 if st.button("\u21BB", key=f"rot_cw_{i}", help="Rotate clockwise"):
                     st.session_state[rot_key] = (st.session_state[rot_key] + 90) % 360
                     st.rerun()
-        
-        with col2:
+        with ctrl_type:
             photo_type = st.selectbox(
                 "Photo Type",
                 options=PHOTO_TYPES,
-                key=f"type_{i}",
-                label_visibility="visible" if i == 0 else "collapsed"
+                key=f"type_{i}"
             )
-        
-        with col3:
+        with ctrl_group:
             group_number = st.number_input(
                 "Group",
                 min_value=1,
                 value=1,
                 step=1,
-                key=f"group_{i}",
-                label_visibility="visible" if i == 0 else "collapsed"
+                key=f"group_{i}"
             )
+
+        st.divider()
         
         rotated_buf = io.BytesIO()
         img.convert("RGB").save(rotated_buf, format="JPEG", quality=95)
