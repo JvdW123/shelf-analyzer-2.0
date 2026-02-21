@@ -223,35 +223,37 @@ if uploaded_photos:
         if angle != 0:
             img = img.rotate(-angle, expand=True)
 
-        preview_buf = io.BytesIO()
-        img.convert("RGB").save(preview_buf, format="JPEG")
-        st.image(preview_buf.getvalue(), use_container_width=True)
+        col_img, _ = st.columns(2)
+        with col_img:
+            preview_buf = io.BytesIO()
+            img.convert("RGB").save(preview_buf, format="JPEG")
+            st.image(preview_buf.getvalue(), use_container_width=True)
 
-        ctrl_rot, ctrl_type, ctrl_group = st.columns([1, 2, 1])
-        with ctrl_rot:
-            r1, r2 = st.columns(2)
-            with r1:
-                if st.button("\u21BA", key=f"rot_ccw_{i}", help="Rotate counter-clockwise"):
-                    st.session_state[rot_key] = (st.session_state[rot_key] - 90) % 360
-                    st.rerun()
-            with r2:
-                if st.button("\u21BB", key=f"rot_cw_{i}", help="Rotate clockwise"):
-                    st.session_state[rot_key] = (st.session_state[rot_key] + 90) % 360
-                    st.rerun()
-        with ctrl_type:
-            photo_type = st.selectbox(
-                "Photo Type",
-                options=PHOTO_TYPES,
-                key=f"type_{i}"
-            )
-        with ctrl_group:
-            group_number = st.number_input(
-                "Group",
-                min_value=1,
-                value=1,
-                step=1,
-                key=f"group_{i}"
-            )
+            ctrl_rot, ctrl_type, ctrl_group = st.columns([1, 2, 1])
+            with ctrl_rot:
+                r1, r2 = st.columns(2)
+                with r1:
+                    if st.button("\u21BA", key=f"rot_ccw_{i}", help="Rotate counter-clockwise"):
+                        st.session_state[rot_key] = (st.session_state[rot_key] - 90) % 360
+                        st.rerun()
+                with r2:
+                    if st.button("\u21BB", key=f"rot_cw_{i}", help="Rotate clockwise"):
+                        st.session_state[rot_key] = (st.session_state[rot_key] + 90) % 360
+                        st.rerun()
+            with ctrl_type:
+                photo_type = st.selectbox(
+                    "Photo Type",
+                    options=PHOTO_TYPES,
+                    key=f"type_{i}"
+                )
+            with ctrl_group:
+                group_number = st.number_input(
+                    "Group",
+                    min_value=1,
+                    value=1,
+                    step=1,
+                    key=f"group_{i}"
+                )
 
         st.divider()
         
