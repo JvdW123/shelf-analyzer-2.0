@@ -77,8 +77,8 @@ from modules.claude_client import analyze_shelf
 from modules.excel_generator import generate_excel
 from prompts.shelf_analysis import SYSTEM_PROMPT
 from accuracy_tester.excel_reader import read_excel
-from accuracy_tester.comparator import compare
-from accuracy_tester.scorer import score, get_error_table
+from accuracy_tester.semantic_scorer import run_semantic_scoring
+from accuracy_tester.scorer import get_flagged_table
 
 # ---------------------------------------------------------------------------
 # Session state initialisation
@@ -89,9 +89,7 @@ _state_defaults = {
     "at_transcript_text": None,
     "at_generated_skus": None,
     "at_generated_excel_bytes": None,
-    "at_comparison": None,
-    "at_score_report": None,
-    "at_error_table": None,
+    "at_semantic_result": None,
     "at_metadata": None,
     "at_diagnosis_text": None,
     "at_diagnosis_mode": None,
@@ -345,19 +343,25 @@ if st.button(
             st.write("Step 4: Normalising generated Excel for comparison...")
             gen_rows = read_excel(excel_bytes)
 
-            # Step 5: Compare
-            st.write("Step 5: Running field-level comparison (pure Python)...")
-            comparison = compare(gt_rows, gen_rows)
-            score_report = score(comparison)
-            error_table = get_error_table(comparison)
+            # Step 5: Semantic scoring via Claude Opus Extended Thinking
+            st.write(
+                "Step 5: Running semantic scoring via Claude Opus "
+                "(Extended Thinking) — this may take 2–4 minutes..."
+            )
+            semantic_result = run_semantic_scoring(
+                gt_rows=gt_rows,
+                gen_rows=gen_rows,
+                api_key=st.secrets["anthropic_api_key"],
+            )
+            st.session_state["at_semantic_result"] = semantic_result
+            st.session_state["at_diagnosis_text"] = None  # reset narrative
 
-            st.session_state["at_comparison"] = comparison
-            st.session_state["at_score_report"] = score_report
-            st.session_state["at_error_table"] = error_table
-            st.session_state["at_diagnosis_text"] = None  # reset diagnosis
-
+            s1 = semantic_result["section1"]
             status.update(
-                label=f"Done! Overall accuracy: {score_report.overall_score}%",
+                label=(
+                    f"Done! Completeness: {s1['completeness_score_pct']:.1f}% — "
+                    f"{s1['matched_count']}/{s1['total_gt_count']} SKUs matched"
+                ),
                 state="complete",
                 expanded=False,
             )
@@ -369,56 +373,16 @@ if st.button(
                 st.code(traceback.format_exc())
 
 # ---------------------------------------------------------------------------
-# SECTION 5 — Results
+# SECTION 5 — Results (6 sections)
 # ---------------------------------------------------------------------------
 
-if st.session_state.get("at_score_report") is not None:
-    score_report = st.session_state["at_score_report"]
-    comparison = st.session_state["at_comparison"]
-    error_table = st.session_state["at_error_table"]
+if st.session_state.get("at_semantic_result") is not None:
+    result = st.session_state["at_semantic_result"]
 
     st.divider()
     st.header("5. Accuracy Results")
 
-    # --- Top-level metrics ---
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Overall Accuracy", f"{score_report.overall_score}%")
-    col2.metric("Matched Rows", score_report.matched_count)
-    col3.metric("Missed SKUs (GT only)", score_report.unmatched_gt_count)
-    col4.metric("Extra SKUs (generated only)", score_report.unmatched_gen_count)
-
-    # --- Duplicate key warning ---
-    # Show before any scores so the user can factor this into their interpretation.
-    if comparison.duplicate_gt_keys or comparison.duplicate_gen_keys:
-        with st.expander(
-            "Warning: duplicate row keys detected — some rows were excluded from matching",
-            expanded=True,
-        ):
-            st.warning(
-                "Two or more rows share the same composite key "
-                "(Brand + Product Name + Packaging Size). "
-                "Only the **first** occurrence of each duplicate key is matched; "
-                "subsequent duplicates fall into the 'unmatched' bucket and are "
-                "penalised as missed rows. This typically happens when the same "
-                "product appears on multiple shelf levels. "
-                "Scores may be understated as a result."
-            )
-            if comparison.duplicate_gt_keys:
-                st.write("**Duplicates in ground truth:**")
-                gt_dup_df = pd.DataFrame(
-                    [{"Key (brand | product | size)": k, "Occurrences": v}
-                     for k, v in sorted(comparison.duplicate_gt_keys.items())]
-                )
-                st.dataframe(gt_dup_df, use_container_width=True, hide_index=True)
-            if comparison.duplicate_gen_keys:
-                st.write("**Duplicates in generated output:**")
-                gen_dup_df = pd.DataFrame(
-                    [{"Key (brand | product | size)": k, "Occurrences": v}
-                     for k, v in sorted(comparison.duplicate_gen_keys.items())]
-                )
-                st.dataframe(gen_dup_df, use_container_width=True, hide_index=True)
-
-    # --- Download buttons side by side ---
+    # --- Download buttons ---
     if st.session_state.get("at_generated_excel_bytes"):
         dl_col1, dl_col2, _ = st.columns([1, 1, 2])
         with dl_col1:
@@ -439,100 +403,230 @@ if st.session_state.get("at_score_report") is not None:
 
     st.write("")
 
-    # --- Per-column accuracy table ---
-    st.subheader("Per-Column Accuracy")
-
-    col_data = []
-    for col_score in score_report.per_column.values():
-        col_data.append({
-            "Column": col_score.column_name,
-            "Accuracy %": col_score.accuracy_pct,
-            "Correct": col_score.correct,
-            "Wrong": col_score.wrong,
-            "Missed": col_score.missed,
-            "Both Null (skipped)": col_score.skipped,
-            "Total Scored": col_score.total_scored,
-        })
-
-    score_df = pd.DataFrame(col_data).sort_values("Accuracy %")
-
-    def _colour_accuracy(val):
-        if isinstance(val, (int, float)):
-            if val >= 90:
-                return "background-color: #C6EFCE; color: #006100"
-            elif val >= 70:
-                return "background-color: #FFEB9C; color: #9C6500"
-            else:
-                return "background-color: #FFC7CE; color: #9C0006"
-        return ""
-
-    styled_df = score_df.style.applymap(_colour_accuracy, subset=["Accuracy %"])
-    st.dataframe(styled_df, use_container_width=True, hide_index=True)
-
-    # --- Error table ---
-    if error_table:
-        st.subheader(f"Field-Level Errors ({len(error_table)} total)")
-        with st.expander("Show full error table", expanded=False):
-            error_df = pd.DataFrame(error_table)
-            st.dataframe(error_df, use_container_width=True, hide_index=True)
-    else:
-        st.success("No field-level errors found in matched rows!")
-
-    # --- Unmatched rows ---
-    if comparison.unmatched_gt or comparison.unmatched_gen:
-        with st.expander(
-            f"Unmatched rows — {len(comparison.unmatched_gt)} missed, "
-            f"{len(comparison.unmatched_gen)} extra",
-            expanded=False,
-        ):
-            if comparison.unmatched_gt:
-                st.write("**In ground truth but NOT found by pipeline (missed SKUs):**")
-                st.dataframe(
-                    pd.DataFrame(comparison.unmatched_gt),
-                    use_container_width=True,
-                    hide_index=True,
-                )
-            if comparison.unmatched_gen:
-                st.write("**Found by pipeline but NOT in ground truth (extra/hallucinated SKUs):**")
-                st.dataframe(
-                    pd.DataFrame(comparison.unmatched_gen),
-                    use_container_width=True,
-                    hide_index=True,
-                )
+    # Shared colour helper (used by sections 2, 3, 4)
+    def _colour_pct(val):
+        if not isinstance(val, (int, float)):
+            return ""
+        if val >= 90:
+            return "background-color: #C6EFCE; color: #006100"
+        elif val >= 70:
+            return "background-color: #FFEB9C; color: #9C6500"
+        return "background-color: #FFC7CE; color: #9C0006"
 
     # -----------------------------------------------------------------------
-    # SECTION 6 — Claude Diagnostic
+    # Section 1 — Completeness Score
+    # -----------------------------------------------------------------------
+    st.subheader("Section 1 — Completeness Score")
+    s1 = result["section1"]
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Completeness Score", f"{s1['completeness_score_pct']:.1f}%")
+    c2.metric("Matched SKUs", s1["matched_count"])
+    c3.metric("Missed SKUs", len(s1["missed_skus"]))
+    c4.metric("Hallucinated SKUs", len(s1["hallucinated_skus"]))
+
+    if s1["missed_skus"]:
+        with st.expander(
+            f"Missed SKUs ({len(s1['missed_skus'])}) — in ground truth but NOT found by pipeline"
+        ):
+            st.dataframe(
+                pd.DataFrame(s1["missed_skus"]),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+    if s1["hallucinated_skus"]:
+        with st.expander(
+            f"Hallucinated SKUs ({len(s1['hallucinated_skus'])}) — found by pipeline but NOT in ground truth"
+        ):
+            st.dataframe(
+                pd.DataFrame(s1["hallucinated_skus"]),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+    # -----------------------------------------------------------------------
+    # Section 2 — Critical Field Accuracy
+    # -----------------------------------------------------------------------
+    st.subheader("Section 2 — Critical Field Accuracy")
+    s2 = result["section2"]
+
+    _s2_labels = {
+        "shelf_level":            "Shelf Level",
+        "number_of_shelf_levels": "Number of Shelf Levels",
+        "facings":                "Facings",
+        "price":                  "Price (Local, ±0.01 tolerance)",
+        "packaging_size_ml":      "Packaging Size (ml)",
+    }
+    s2_rows = [
+        {
+            "Field": _s2_labels.get(k, k),
+            "Correct": v["correct"],
+            "Incorrect": v["incorrect"],
+            "Accuracy %": v["accuracy_pct"],
+        }
+        for k, v in s2.items()
+        if k in _s2_labels
+    ]
+    st.dataframe(
+        pd.DataFrame(s2_rows).style.applymap(_colour_pct, subset=["Accuracy %"]),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    # -----------------------------------------------------------------------
+    # Section 3 — Classification Accuracy
+    # -----------------------------------------------------------------------
+    st.subheader("Section 3 — Classification Accuracy")
+    s3 = result["section3"]
+
+    _s3_labels = {
+        "is_private_label":         "Is Private Label",
+        "is_branded_private_label": "Is Branded Private Label",
+        "product_type":             "Product Type",
+    }
+    s3_rows = [
+        {
+            "Field": _s3_labels.get(k, k),
+            "Correct": v["correct"],
+            "Incorrect": v["incorrect"],
+            "Accuracy %": v["accuracy_pct"],
+        }
+        for k, v in s3.items()
+        if isinstance(v, dict) and "correct" in v
+    ]
+    st.dataframe(
+        pd.DataFrame(s3_rows).style.applymap(_colour_pct, subset=["Accuracy %"]),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    flagged_pt = s3.get("product_type", {}).get("flagged", [])
+    if flagged_pt:
+        with st.expander(f"Flagged product_type rows ({len(flagged_pt)})"):
+            st.dataframe(
+                pd.DataFrame(flagged_pt),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+    # -----------------------------------------------------------------------
+    # Section 4 — Extraction Method Fields
+    # -----------------------------------------------------------------------
+    st.subheader("Section 4 — Extraction Method Fields")
+    s4 = result["section4"]
+
+    _s4_labels = {
+        "extraction_method": "Extraction Method",
+        "processing_method": "Processing Method",
+        "hpp_treatment":     "HPP Treatment",
+        "packaging_type":    "Packaging Type",
+    }
+    s4_rows = [
+        {
+            "Field": _s4_labels.get(k, k),
+            "Correct": v["correct"],
+            "Incorrect": v["incorrect"],
+            "Accuracy %": v["accuracy_pct"],
+        }
+        for k, v in s4.items()
+        if k in _s4_labels
+    ]
+    st.dataframe(
+        pd.DataFrame(s4_rows).style.applymap(_colour_pct, subset=["Accuracy %"]),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    # -----------------------------------------------------------------------
+    # Section 5 — Semantic Field Quality Score
+    # -----------------------------------------------------------------------
+    st.subheader("Section 5 — Semantic Field Quality Score")
+    s5 = result["section5"]
+
+    sc1, sc2, sc3, sc4 = st.columns(4)
+    sc1.metric("Overall Semantic Score", f"{s5['overall_semantic_score_pct']:.1f}%")
+    sc2.metric("Product Name", f"{s5['product_name_score_pct']:.1f}%")
+    sc3.metric("Flavor", f"{s5['flavor_score_pct']:.1f}%")
+    sc4.metric("Brand", f"{s5['brand_score_pct']:.1f}%")
+
+    flagged_semantic = s5.get("flagged_rows", [])
+    if flagged_semantic:
+        with st.expander(
+            f"Rows with severe semantic deviation ({len(flagged_semantic)})"
+        ):
+            st.dataframe(
+                pd.DataFrame(flagged_semantic),
+                use_container_width=True,
+                hide_index=True,
+            )
+    else:
+        st.success("No severe semantic deviations detected.")
+
+    # -----------------------------------------------------------------------
+    # Section 6 — Flagged Rows Table
+    # -----------------------------------------------------------------------
+    st.subheader("Section 6 — Flagged Rows")
+    s6 = result.get("section6", [])
+
+    if s6:
+        n_critical = sum(1 for r in s6 if r.get("severity") == "critical")
+        n_warning = sum(1 for r in s6 if r.get("severity") == "warning")
+        st.caption(
+            f"{len(s6)} flagged (field, SKU) pairs — "
+            f"{n_critical} critical | {n_warning} warnings"
+        )
+
+        s6_df = pd.DataFrame(s6)
+
+        def _colour_severity_row(row):
+            if row.get("severity") == "critical":
+                return ["background-color: #FFC7CE; color: #9C0006"] * len(row)
+            elif row.get("severity") == "warning":
+                return ["background-color: #FFEB9C; color: #9C6500"] * len(row)
+            return [""] * len(row)
+
+        st.dataframe(
+            s6_df.style.apply(_colour_severity_row, axis=1),
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.success("No critical errors or severe deviations detected.")
+
+    # -----------------------------------------------------------------------
+    # SECTION 6 (UI) — Narrative Diagnosis
     # -----------------------------------------------------------------------
 
     st.divider()
-    st.header("6. Claude Diagnostic")
+    st.header("6. Narrative Diagnosis")
     st.caption(
-        "Feed the accuracy results to Claude for pattern analysis and improvement suggestions. "
-        "Quick Diagnosis is fast and cheap. Deep Diagnosis uses Extended Thinking — only use when needed."
+        "Call 2: Claude reads the scored results above and produces a written diagnostic. "
+        "Scoring (Call 1) always uses Opus Extended Thinking. "
+        "The narrative uses Sonnet by default — toggle Deep mode for Opus Extended Thinking."
     )
 
     diag_col1, diag_col2 = st.columns(2)
 
     with diag_col1:
         if st.button(
-            "Quick Diagnosis (Sonnet)",
+            "Quick Narrative (Sonnet)",
             type="secondary",
             use_container_width=True,
             help="Uses claude-sonnet-4-6. Fast and cheap.",
         ):
-            with st.spinner("Running quick diagnosis with claude-sonnet-4-6..."):
+            with st.spinner("Running narrative with claude-sonnet-4-6..."):
                 try:
-                    from accuracy_tester.diagnostics import run_quick_diagnosis
-                    text = run_quick_diagnosis(
-                        score_report=score_report,
-                        comparison=comparison,
-                        error_table=error_table,
+                    from accuracy_tester.diagnostics import run_narrative_diagnosis
+                    text = run_narrative_diagnosis(
+                        semantic_result=result,
                         api_key=st.secrets["anthropic_api_key"],
+                        deep=False,
                     )
                     st.session_state["at_diagnosis_text"] = text
                     st.session_state["at_diagnosis_mode"] = "Quick (claude-sonnet-4-6)"
                 except Exception as e:
-                    st.error(f"Diagnosis failed: {e}")
+                    st.error(f"Narrative diagnosis failed: {e}")
 
     with diag_col2:
         deep_confirm = st.checkbox(
@@ -540,35 +634,32 @@ if st.session_state.get("at_score_report") is not None:
             key="at_deep_confirm",
         )
         if st.button(
-            "Deep Diagnosis (Opus Extended Thinking)",
+            "Deep Narrative (Opus Extended Thinking)",
             type="secondary",
             use_container_width=True,
             disabled=not deep_confirm,
             help="Uses claude-opus-4-6 with Extended Thinking. Thorough but costly.",
         ):
-            with st.spinner("Running deep diagnosis with claude-opus-4-6 Extended Thinking..."):
+            with st.spinner("Running deep narrative with claude-opus-4-6 Extended Thinking..."):
                 try:
-                    from accuracy_tester.diagnostics import run_deep_diagnosis
-                    text = run_deep_diagnosis(
-                        score_report=score_report,
-                        comparison=comparison,
-                        error_table=error_table,
+                    from accuracy_tester.diagnostics import run_narrative_diagnosis
+                    text = run_narrative_diagnosis(
+                        semantic_result=result,
                         api_key=st.secrets["anthropic_api_key"],
+                        deep=True,
                     )
                     st.session_state["at_diagnosis_text"] = text
                     st.session_state["at_diagnosis_mode"] = "Deep (claude-opus-4-6 Extended Thinking)"
                 except Exception as e:
-                    st.error(f"Diagnosis failed: {e}")
+                    st.error(f"Narrative diagnosis failed: {e}")
 
-    # Display diagnosis result
     if st.session_state.get("at_diagnosis_text"):
-        st.subheader(f"Diagnosis — {st.session_state['at_diagnosis_mode']}")
+        st.subheader(f"Narrative — {st.session_state['at_diagnosis_mode']}")
         st.markdown(st.session_state["at_diagnosis_text"])
 
-        # Allow downloading the diagnosis as a text file
         st.download_button(
-            label="Download Diagnosis as .txt",
+            label="Download Narrative as .txt",
             data=st.session_state["at_diagnosis_text"],
-            file_name="accuracy_diagnosis.txt",
+            file_name="accuracy_narrative.txt",
             mime="text/plain",
         )
