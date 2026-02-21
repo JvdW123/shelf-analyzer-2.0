@@ -384,6 +384,37 @@ if st.session_state.get("at_score_report") is not None:
     col3.metric("Missed SKUs (GT only)", score_report.unmatched_gt_count)
     col4.metric("Extra SKUs (generated only)", score_report.unmatched_gen_count)
 
+    # --- Duplicate key warning ---
+    # Show before any scores so the user can factor this into their interpretation.
+    if comparison.duplicate_gt_keys or comparison.duplicate_gen_keys:
+        with st.expander(
+            "Warning: duplicate row keys detected — some rows were excluded from matching",
+            expanded=True,
+        ):
+            st.warning(
+                "Two or more rows share the same composite key "
+                "(Brand + Product Name + Packaging Size). "
+                "Only the **first** occurrence of each duplicate key is matched; "
+                "subsequent duplicates fall into the 'unmatched' bucket and are "
+                "penalised as missed rows. This typically happens when the same "
+                "product appears on multiple shelf levels. "
+                "Scores may be understated as a result."
+            )
+            if comparison.duplicate_gt_keys:
+                st.write("**Duplicates in ground truth:**")
+                gt_dup_df = pd.DataFrame(
+                    [{"Key (brand | product | size)": k, "Occurrences": v}
+                     for k, v in sorted(comparison.duplicate_gt_keys.items())]
+                )
+                st.dataframe(gt_dup_df, use_container_width=True, hide_index=True)
+            if comparison.duplicate_gen_keys:
+                st.write("**Duplicates in generated output:**")
+                gen_dup_df = pd.DataFrame(
+                    [{"Key (brand | product | size)": k, "Occurrences": v}
+                     for k, v in sorted(comparison.duplicate_gen_keys.items())]
+                )
+                st.dataframe(gen_dup_df, use_container_width=True, hide_index=True)
+
     # --- Download buttons side by side ---
     if st.session_state.get("at_generated_excel_bytes"):
         dl_col1, dl_col2, _ = st.columns([1, 1, 2])

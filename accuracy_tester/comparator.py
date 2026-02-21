@@ -32,6 +32,7 @@ compare() returns a ComparisonResult dataclass containing:
 from __future__ import annotations
 
 import difflib
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -77,6 +78,12 @@ class ComparisonResult:
     unmatched_gt: list[dict] = field(default_factory=list)   # in GT, not in generated
     unmatched_gen: list[dict] = field(default_factory=list)  # in generated, not in GT
     comparable_columns: list[dict] = field(default_factory=list)
+    # Keys that appeared more than once (brand|product_name|size collision).
+    # Only the first occurrence is matched; subsequent duplicates are silently
+    # dropped from the key map and end up as unmatched rows.
+    # dict maps the composite key string → how many times it appeared.
+    duplicate_gt_keys: dict[str, int] = field(default_factory=dict)
+    duplicate_gen_keys: dict[str, int] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -168,8 +175,16 @@ def compare(
     comparable_cols = get_comparable_columns()
     result = ComparisonResult(comparable_columns=comparable_cols)
 
-    # Build key maps
-    gt_key_map: dict[str, dict] = {}      # key → row (first occurrence wins)
+    # Detect duplicate keys before building the key maps so we can warn the user.
+    # A duplicate means two or more rows share the same brand+product_name+size,
+    # which is ambiguous — only the first occurrence will be matched.
+    gt_key_counts = Counter(_build_key(row) for row in ground_truth)
+    gen_key_counts = Counter(_build_key(row) for row in generated)
+    result.duplicate_gt_keys = {k: v for k, v in gt_key_counts.items() if v > 1}
+    result.duplicate_gen_keys = {k: v for k, v in gen_key_counts.items() if v > 1}
+
+    # Build key maps (first occurrence wins — duplicates beyond the first are dropped)
+    gt_key_map: dict[str, dict] = {}
     gen_key_map: dict[str, dict] = {}
 
     for row in ground_truth:

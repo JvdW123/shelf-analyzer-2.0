@@ -43,6 +43,11 @@ METADATA_COLUMNS: set[str] = {
     "store_name", "shelf_location", "currency",
 }
 
+# Columns that are always excluded from accuracy scoring because they change
+# between runs by design and would produce meaningless false mismatches.
+# "photo" contains the source filename, which differs every test run.
+NON_SCORING_COLUMNS: set[str] = {"photo"}
+
 
 def read_excel(source: Union[bytes, str, io.BytesIO]) -> list[dict]:
     """
@@ -125,9 +130,13 @@ def read_excel(source: Union[bytes, str, io.BytesIO]) -> list[dict]:
                 lambda x: float(x) if pd.notna(x) else None
             )
         else:
-            # text: strip whitespace, convert NaN → None
+            # text: strip whitespace, convert NaN → None.
+            # Also filter the literal string "nan" which pandas produces when
+            # dtype=str is combined with na_values — those cells are empty.
             df[key] = df[key].apply(
-                lambda x: str(x).strip() if pd.notna(x) and str(x).strip() != "" else None
+                lambda x: str(x).strip()
+                if pd.notna(x) and str(x).strip() not in ("", "nan")
+                else None
             )
 
     # Drop rows where every cell is None (completely blank rows)
@@ -143,9 +152,11 @@ def get_comparable_columns() -> list[dict]:
     Excluded:
     - Metadata columns (user-supplied, not Claude output)
     - Formula column (price_per_liter_eur — Excel-computed, not in JSON)
+    - NON_SCORING_COLUMNS (photo — filename changes every run, always wrong by design)
     """
     return [
         col for col in COLUMN_SCHEMA
         if col["key"] not in METADATA_COLUMNS
         and col["key"] not in FORMULA_COLUMNS
+        and col["key"] not in NON_SCORING_COLUMNS
     ]
