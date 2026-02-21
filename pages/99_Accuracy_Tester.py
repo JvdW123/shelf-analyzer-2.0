@@ -41,6 +41,9 @@ st.set_page_config(
 if "at_authenticated" not in st.session_state:
     st.session_state["at_authenticated"] = False
 
+if st.secrets.get("dev_mode", False):
+    st.session_state["at_authenticated"] = True
+
 if not st.session_state["at_authenticated"]:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:

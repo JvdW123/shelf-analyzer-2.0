@@ -10,6 +10,8 @@ with warning-level flagged rows from the semantic scorer.
 
 from __future__ import annotations
 
+import math
+
 from accuracy_tester.comparator import MatchResult
 
 
@@ -28,11 +30,12 @@ def _safe_str(val) -> str | None:
 
 
 def _safe_num(val) -> float | None:
-    """Coerce a value to float, or None."""
+    """Coerce a value to float, or None. NaN is treated as None."""
     if val is None:
         return None
     try:
-        return float(val)
+        f = float(val)
+        return None if math.isnan(f) else f
     except (TypeError, ValueError):
         return None
 

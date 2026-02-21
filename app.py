@@ -66,6 +66,9 @@ if "transcript_text" not in st.session_state:
 # PART 1 — PASSWORD GATE
 # ==============================================================================
 
+if st.secrets.get("dev_mode", False):
+    st.session_state["authenticated"] = True
+
 if not st.session_state["authenticated"]:
     # Center the login screen using columns
     col1, col2, col3 = st.columns([1, 2, 1])
