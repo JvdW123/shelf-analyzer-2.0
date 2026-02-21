@@ -77,8 +77,10 @@ from modules.claude_client import analyze_shelf
 from modules.excel_generator import generate_excel
 from prompts.shelf_analysis import SYSTEM_PROMPT
 from accuracy_tester.excel_reader import read_excel
-from accuracy_tester.semantic_scorer import run_semantic_scoring
-from accuracy_tester.scorer import get_flagged_table
+from accuracy_tester.key_normaliser import normalise_keys
+from accuracy_tester.comparator import match_rows
+from accuracy_tester.scorer import score_all_sections, merge_section6
+from accuracy_tester.semantic_scorer import score_semantic_fields
 
 # ---------------------------------------------------------------------------
 # Session state initialisation
@@ -89,7 +91,10 @@ _state_defaults = {
     "at_transcript_text": None,
     "at_generated_skus": None,
     "at_generated_excel_bytes": None,
+    "at_scored_result": None,
     "at_semantic_result": None,
+    "at_gt_rows": None,
+    "at_gen_rows": None,
     "at_metadata": None,
     "at_diagnosis_text": None,
     "at_diagnosis_mode": None,
@@ -309,12 +314,12 @@ if st.button(
     with st.status("Running accuracy test...", expanded=True) as status:
         try:
             # Step 1: Read ground truth
-            st.write("Step 1: Reading ground truth Excel...")
+            st.write("Reading ground truth Excel...")
             gt_rows = read_excel(at_ground_truth_file.getvalue())
             st.write(f"  → {len(gt_rows)} rows in ground truth")
 
             # Step 2: Run the analysis pipeline
-            st.write("Step 2: Sending photos to Claude (this may take 1–3 minutes)...")
+            st.write("Sending photos to Claude (this may take 1–3 minutes)...")
             photo_tags_for_prompt = [
                 {"filename": t["filename"], "type": t["type"], "group": t["group"]}
                 for t in st.session_state["at_photo_tags"]
@@ -334,50 +339,87 @@ if st.button(
             st.session_state["at_generated_skus"] = skus
 
             # Step 3: Generate Excel from pipeline output
-            st.write("Step 3: Generating Excel from pipeline output...")
+            st.write("Generating Excel from pipeline output...")
             meta_for_excel = {k: v for k, v in metadata.items() if k != "exchange_rate"}
             excel_bytes = generate_excel(skus, meta_for_excel)
             st.session_state["at_generated_excel_bytes"] = excel_bytes
 
             # Step 4: Read generated Excel back through the same normaliser
-            st.write("Step 4: Normalising generated Excel for comparison...")
+            st.write("Normalising generated Excel for comparison...")
             gen_rows = read_excel(excel_bytes)
 
-            # Step 5: Semantic scoring via Claude Opus Extended Thinking
-            st.write(
-                "Step 5: Running semantic scoring via Claude Opus "
-                "(Extended Thinking) — this may take 2–4 minutes..."
-            )
-            semantic_result = run_semantic_scoring(
-                gt_rows=gt_rows,
-                gen_rows=gen_rows,
-                api_key=st.secrets["anthropic_api_key"],
-            )
-            st.session_state["at_semantic_result"] = semantic_result
-            st.session_state["at_diagnosis_text"] = None  # reset narrative
-
-            s1 = semantic_result["section1"]
-            status.update(
-                label=(
-                    f"Done! Completeness: {s1['completeness_score_pct']:.1f}% — "
-                    f"{s1['matched_count']}/{s1['total_gt_count']} SKUs matched"
-                ),
-                state="complete",
-                expanded=False,
-            )
+            st.session_state["at_gt_rows"] = gt_rows
+            st.session_state["at_gen_rows"] = gen_rows
 
         except Exception as e:
             status.update(label=f"Error: {type(e).__name__}", state="error", expanded=True)
             st.error(str(e))
             with st.expander("Traceback"):
                 st.code(traceback.format_exc())
+            st.stop()
+
+        # --- Accuracy scoring (3-step hybrid pipeline) ---
+        api_key = st.secrets["anthropic_api_key"]
+
+        try:
+            st.write("Step 1: Normalising SKU keys (~20s)...")
+            keys = normalise_keys(gt_rows, gen_rows, api_key)
+        except Exception as e:
+            status.update(label="Error in key normalisation", state="error")
+            with st.expander("Key normalisation failed — raw error"):
+                st.code(str(e))
+            st.stop()
+
+        try:
+            st.write("Step 2: Scoring fields (instant)...")
+            match_result = match_rows(
+                keys["gt_keys"], keys["gen_keys"], gt_rows, gen_rows,
+            )
+            scored_result = score_all_sections(match_result, gt_rows, gen_rows)
+        except Exception as e:
+            status.update(label="Error in field scoring", state="error")
+            with st.expander("Field scoring failed — raw error"):
+                st.code(traceback.format_exc())
+            st.stop()
+
+        try:
+            st.write("Step 3: Semantic quality check (~20s)...")
+            semantic_result = score_semantic_fields(
+                matched_pairs=match_result.matched_pairs,
+                gt_rows=gt_rows,
+                gen_rows=gen_rows,
+                api_key=api_key,
+            )
+        except Exception as e:
+            status.update(label="Error in semantic scoring", state="error")
+            with st.expander("Semantic scoring failed — raw error"):
+                st.code(str(e))
+            st.stop()
+
+        # Merge Section 6 (critical from scorer + warnings from semantic)
+        merge_section6(scored_result, semantic_result.get("flagged_rows", []))
+        scored_result["section5"] = semantic_result
+
+        st.session_state["at_scored_result"] = scored_result
+        st.session_state["at_semantic_result"] = semantic_result
+        st.session_state["at_diagnosis_text"] = None
+
+        s1 = scored_result["section1"]
+        status.update(
+            label=(
+                f"Done! Completeness: {s1['completeness_score_pct']:.1f}% — "
+                f"{s1['matched_count']}/{s1['total_gt_count']} SKUs matched"
+            ),
+            state="complete",
+            expanded=False,
+        )
 
 # ---------------------------------------------------------------------------
 # SECTION 5 — Results (6 sections)
 # ---------------------------------------------------------------------------
 
-if st.session_state.get("at_semantic_result") is not None:
-    result = st.session_state["at_semantic_result"]
+if st.session_state.get("at_scored_result") is not None:
+    result = st.session_state["at_scored_result"]
 
     st.divider()
     st.header("5. Accuracy Results")
@@ -452,11 +494,11 @@ if st.session_state.get("at_semantic_result") is not None:
     s2 = result["section2"]
 
     _s2_labels = {
-        "shelf_level":            "Shelf Level",
-        "number_of_shelf_levels": "Number of Shelf Levels",
-        "facings":                "Facings",
-        "price":                  "Price (Local, ±0.01 tolerance)",
-        "packaging_size_ml":      "Packaging Size (ml)",
+        "shelf_level":       "Shelf Level",
+        "shelf_levels":      "Number of Shelf Levels",
+        "facings":           "Facings",
+        "price_local":       "Price (Local, ±0.01 tolerance)",
+        "packaging_size_ml": "Packaging Size (ml)",
     }
     s2_rows = [
         {
@@ -501,15 +543,6 @@ if st.session_state.get("at_semantic_result") is not None:
         hide_index=True,
     )
 
-    flagged_pt = s3.get("product_type", {}).get("flagged", [])
-    if flagged_pt:
-        with st.expander(f"Flagged product_type rows ({len(flagged_pt)})"):
-            st.dataframe(
-                pd.DataFrame(flagged_pt),
-                use_container_width=True,
-                hide_index=True,
-            )
-
     # -----------------------------------------------------------------------
     # Section 4 — Extraction Method Fields
     # -----------------------------------------------------------------------
@@ -517,10 +550,10 @@ if st.session_state.get("at_semantic_result") is not None:
     s4 = result["section4"]
 
     _s4_labels = {
-        "extraction_method": "Extraction Method",
-        "processing_method": "Processing Method",
-        "hpp_treatment":     "HPP Treatment",
-        "packaging_type":    "Packaging Type",
+        "juice_extraction_method": "Juice Extraction Method",
+        "processing_method":       "Processing Method",
+        "hpp_treatment":           "HPP Treatment",
+        "packaging_type":          "Packaging Type",
     }
     s4_rows = [
         {
@@ -601,12 +634,18 @@ if st.session_state.get("at_semantic_result") is not None:
     st.divider()
     st.header("6. Narrative Diagnosis")
     st.caption(
-        "Call 2: Claude reads the scored results above and produces a written diagnostic. "
-        "Scoring (Call 1) always uses Opus Extended Thinking. "
+        "Claude reads the scored results above and produces a written diagnostic. "
         "The narrative uses Sonnet by default — toggle Deep mode for Opus Extended Thinking."
+    )
+    st.info(
+        "Deep mode upgrades the narrative only — "
+        "field scoring is always deterministic Python."
     )
 
     diag_col1, diag_col2 = st.columns(2)
+
+    _diag_gt = st.session_state.get("at_gt_rows", [])
+    _diag_gen = st.session_state.get("at_gen_rows", [])
 
     with diag_col1:
         if st.button(
@@ -619,14 +658,17 @@ if st.session_state.get("at_semantic_result") is not None:
                 try:
                     from accuracy_tester.diagnostics import run_narrative_diagnosis
                     text = run_narrative_diagnosis(
-                        semantic_result=result,
+                        scored_result=result,
+                        gt_rows=_diag_gt,
+                        gen_rows=_diag_gen,
                         api_key=st.secrets["anthropic_api_key"],
                         deep=False,
                     )
                     st.session_state["at_diagnosis_text"] = text
                     st.session_state["at_diagnosis_mode"] = "Quick (claude-sonnet-4-6)"
                 except Exception as e:
-                    st.error(f"Narrative diagnosis failed: {e}")
+                    with st.expander("Narrative diagnosis failed — raw error"):
+                        st.code(str(e))
 
     with diag_col2:
         deep_confirm = st.checkbox(
@@ -644,14 +686,17 @@ if st.session_state.get("at_semantic_result") is not None:
                 try:
                     from accuracy_tester.diagnostics import run_narrative_diagnosis
                     text = run_narrative_diagnosis(
-                        semantic_result=result,
+                        scored_result=result,
+                        gt_rows=_diag_gt,
+                        gen_rows=_diag_gen,
                         api_key=st.secrets["anthropic_api_key"],
                         deep=True,
                     )
                     st.session_state["at_diagnosis_text"] = text
                     st.session_state["at_diagnosis_mode"] = "Deep (claude-opus-4-6 Extended Thinking)"
                 except Exception as e:
-                    st.error(f"Narrative diagnosis failed: {e}")
+                    with st.expander("Deep narrative failed — raw error"):
+                        st.code(str(e))
 
     if st.session_state.get("at_diagnosis_text"):
         st.subheader(f"Narrative — {st.session_state['at_diagnosis_mode']}")

@@ -1,22 +1,14 @@
 """
 accuracy_tester/diagnostics.py
 
-Call 2 of the two-call accuracy evaluation pipeline.
+Component 4 — Diagnostic narrative.
 
-Receives the structured JSON produced by Call 1 (semantic_scorer.py) and
-generates a human-readable diagnostic narrative covering:
-  - Error pattern summary
-  - Root cause hypotheses
-  - Improvement recommendations
-  - Overall health assessment
+Receives the full scored JSON from Components 2 and 3 plus original GT and
+generated row lists, and produces a human-readable diagnostic report.
 
-Two modes — controlled by the Deep Diagnosis toggle in the UI:
-  - Quick (default): claude-sonnet-4-6, no extended thinking — fast + cheap
-  - Deep:            claude-opus-4-6, extended thinking (8000 token budget)
-
-Note: Call 1 (semantic matching + scoring) always uses Opus + Extended Thinking
-regardless of this setting. The Deep toggle here applies only to this narrative
-call.
+Two modes:
+  - deep=False: Sonnet 4.6, no Extended Thinking (fast + cheap)
+  - deep=True:  Opus 4.6, Extended Thinking budget_tokens=8000
 """
 
 from __future__ import annotations
@@ -44,65 +36,84 @@ DEEP_THINKING_CONFIG = {
 # System prompt
 # ---------------------------------------------------------------------------
 
-_SYSTEM_PROMPT = """\
-You are a senior machine-learning diagnostic engineer specialising in \
-document-understanding and structured data extraction systems. \
-You help teams understand why an AI shelf-analysis pipeline makes \
-systematic errors and how to fix them.
+DIAGNOSTIC_SYSTEM_PROMPT = """\
+You are a diagnostic engineer specialising in AI-based retail shelf analysis \
+pipelines. The pipeline sends shelf photos to Claude Vision, which extracts \
+SKU-level data: brand, product name, flavor, facings, price, packaging size, \
+shelf level, product type, private label status, and extraction/processing \
+methods. You will receive a structured accuracy report. Your job is to \
+diagnose why the pipeline is making errors and what should change.
 
-Your analysis must be:
-- Evidence-based: cite specific examples from the scored results
-- Pattern-oriented: group errors by type rather than listing them one by one
-- Actionable: every finding should end with a concrete improvement suggestion
-  (prompt change, schema clarification, model setting, etc.)
-- Concise: no padding or filler text
-"""
+Analyse across exactly these four dimensions:
+
+1. SYSTEMATIC ERROR PATTERNS
+- Which fields have the lowest accuracy and what do they have in common?
+- Are errors concentrated on specific SKUs, shelf levels, or product types?
+- Are missed SKUs clustered (e.g. all on one shelf level) or random?
+- Are hallucinated SKUs plausible products or completely fabricated?
+
+2. ROOT CAUSE HYPOTHESES
+For each error pattern identify the most likely cause. Be specific — not \
+"the prompt could be clearer" but "the prompt does not define what counts \
+as one facing for multipacks, causing Claude to count units instead of \
+facings." Categorise each cause as one of:
+- Photo quality or angle (overview vs. close-up)
+- Prompt ambiguity or missing instruction
+- Schema definition unclear
+- Model limitation (genuinely hard to extract from image)
+- Edge case not covered (multipack, promotional pricing, shelf talker \
+obscuring label)
+
+3. IMPROVEMENT RECOMMENDATIONS
+Rank by expected impact. For each recommendation use this exact format:
+Finding: [the error pattern]
+Hypothesis: [why it is happening]
+Recommendation: [exactly what to change — prompt wording, schema definition, \
+photo instructions, or model setting]
+How to verify: [which accuracy score should improve and by how much if the \
+fix works]
+
+4. NEXT TEST PRIORITIES
+Which 2-3 specific shelf types or scenarios should be tested next to confirm \
+these hypotheses?
+
+Rules: cite specific fields, SKU counts, and percentages. Do not restate \
+numbers without interpreting them. No filler. If accuracy is uniformly high \
+with no meaningful patterns, say so in one sentence."""
 
 # ---------------------------------------------------------------------------
 # Prompt builder
 # ---------------------------------------------------------------------------
 
-def _build_narrative_prompt(semantic_result: dict) -> str:
-    """Build the Call 2 prompt from the structured scoring JSON."""
-    result_block = json.dumps(semantic_result, indent=2, default=str)
+def _build_narrative_prompt(
+    scored_result: dict,
+    gt_rows: list[dict],
+    gen_rows: list[dict],
+) -> str:
+    """Build the Call 3 prompt from scored results and original row data."""
+    result_block = json.dumps(scored_result, indent=2, default=str)
+    gt_block = json.dumps(gt_rows, indent=2, default=str)
+    gen_block = json.dumps(gen_rows, indent=2, default=str)
 
     return f"""\
-You are reviewing the accuracy results of an AI shelf-analysis pipeline \
-that reads supermarket shelf photos and outputs structured product data.
-
-## Accuracy Results (from semantic scoring — Call 1)
+## Accuracy Results (from deterministic scoring + semantic scoring)
 
 {result_block}
 
 ---
 
-## Your Task
+## Reference Data
 
-Produce a structured diagnostic report with the following sections:
+### Ground Truth SKUs ({len(gt_rows)} rows)
+{gt_block}
 
-### A. Error Pattern Summary
-List the top error patterns across all 6 sections. For each pattern, state:
-- Which section and field(s) are affected
-- How many errors relate to this pattern
-- Representative ground truth value vs generated value examples
+### Generated SKUs ({len(gen_rows)} rows)
+{gen_block}
 
-### B. Root Cause Hypotheses
-For each major pattern, hypothesise the most likely root cause:
-- Prompt ambiguity — what wording might be misleading?
-- Image quality / visibility limitations
-- Schema gap — is the allowed-values list incomplete or unclear?
-- Model reasoning limitation
+---
 
-### C. Improvement Recommendations
-For each root cause, give a specific actionable recommendation:
-- Exact prompt wording to add or change
-- Schema or allowed-values change
-- Photo capture guidance for the field team
-- Other pipeline change
-
-### D. Overall Health Assessment
-One paragraph: is this pipeline ready for production use? \
-What are the 1–2 highest-priority fixes?""".strip()
+Produce your diagnostic report following the four dimensions in your \
+system prompt.""".strip()
 
 
 # ---------------------------------------------------------------------------
@@ -110,33 +121,36 @@ What are the 1–2 highest-priority fixes?""".strip()
 # ---------------------------------------------------------------------------
 
 def run_narrative_diagnosis(
-    semantic_result: dict,
+    scored_result: dict,
+    gt_rows: list[dict],
+    gen_rows: list[dict],
     api_key: str,
     deep: bool = False,
 ) -> str:
     """
-    Call 2: generate a human-readable narrative from the structured scoring JSON.
+    Call 3: generate a human-readable diagnostic narrative.
 
     Args:
-        semantic_result: Parsed dict from semantic_scorer.run_semantic_scoring()
-        api_key:         Anthropic API key (from st.secrets)
-        deep:            If True, use Opus + Extended Thinking; else use Sonnet.
+        scored_result: Combined dict from scorer + semantic_scorer.
+        gt_rows:       Original ground-truth row dicts.
+        gen_rows:      Original generated row dicts.
+        api_key:       Anthropic API key.
+        deep:          If True, use Opus + Extended Thinking; else Sonnet.
 
     Returns:
         Diagnostic narrative as a plain string.
     """
     client = Anthropic(api_key=api_key, timeout=300.0)
-    prompt = _build_narrative_prompt(semantic_result)
+    prompt = _build_narrative_prompt(scored_result, gt_rows, gen_rows)
 
     if deep:
         response = client.messages.create(
             model=DEEP_MODEL,
             max_tokens=DEEP_MAX_TOKENS,
             thinking=DEEP_THINKING_CONFIG,
-            system=_SYSTEM_PROMPT,
+            system=DIAGNOSTIC_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
         )
-        # Discard thinking blocks — return only the final text response
         text_parts = [
             block.text
             for block in response.content
@@ -147,7 +161,7 @@ def run_narrative_diagnosis(
         response = client.messages.create(
             model=QUICK_MODEL,
             max_tokens=QUICK_MAX_TOKENS,
-            system=_SYSTEM_PROMPT,
+            system=DIAGNOSTIC_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
         )
         return response.content[0].text
