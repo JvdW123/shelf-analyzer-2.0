@@ -225,13 +225,19 @@ if at_uploaded_photos:
 
         st.divider()
 
-        rotated_buf = io.BytesIO()
-        img.convert("RGB").save(rotated_buf, format="JPEG", quality=95)
+        # Use original bytes when no rotation applied to avoid a redundant
+        # re-encode; only re-encode when rotation has changed the pixel data.
+        if angle != 0:
+            raw_buf = io.BytesIO()
+            img.convert("RGB").save(raw_buf, format="JPEG")
+            photo_data = raw_buf.getvalue()
+        else:
+            photo_data = photo.getvalue()
         photo_tags.append({
             "filename": photo.name,
             "type": photo_type,
             "group": group_number,
-            "data": rotated_buf.getvalue(),
+            "data": photo_data,
         })
 
     st.session_state["at_photo_tags"] = photo_tags
