@@ -52,7 +52,7 @@ def resize_image(image_bytes: bytes, filename: str) -> tuple[bytes, str]:
 
     # Compress to JPEG
     buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", quality=quality, optimize=True)
+    img.save(buffer, format="JPEG", quality=quality)
     processed_bytes = buffer.getvalue()
 
     return processed_bytes, "image/jpeg"
