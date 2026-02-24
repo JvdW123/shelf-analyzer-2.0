@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ---
 
+## 2026-02-24 — Prompt v2.1: Price-Tag-First Methodology
+- Restructured STEP 1 from bottle-cap-first to price-tag-strip-first methodology
+- Added price tag position detection (above/below/same-level) per shelf level
+- Added packaging-aware facings counting (bottles, cartons, multi-packs, cans, pouches)
+- Added explicit data source hierarchy (price tag vs product label priority)
+- Updated system prompt with methodology framing
+- Updated quality checks to prioritize price tag cross-referencing
+
 ## 2026-02-17 — Phase 5: Production Polish & Deployment
 - Added comprehensive error handling and user feedback throughout the app
 - Implemented progress indicators for analysis and Excel generation

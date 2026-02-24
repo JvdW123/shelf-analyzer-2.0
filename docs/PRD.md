@@ -108,7 +108,7 @@ openpyxl
 |---------|-------|
 | Model | `claude-opus-4-6` |
 | Extended Thinking | `thinking: {"type": "enabled", "budget_tokens": 10000}` |
-| Max tokens | 16000 |
+| Max tokens | 64000 |
 | Image format | Base64-encoded content blocks |
 | System prompt | Defined in `prompts/shelf_analysis.py` as `SYSTEM_PROMPT` |
 | User message | Built by `modules/prompt_builder.py` using `ANALYSIS_PROMPT` template |
@@ -318,7 +318,7 @@ Example: `Tesco_London_2026-02-17.xlsx`
 ### 8.1 File: prompts/shelf_analysis.py
 Contains two string variables:
 - `SYSTEM_PROMPT` — sets Claude's role as an expert retail shelf analyst
-- `ANALYSIS_PROMPT` — the full 5-step analysis instructions with three placeholders:
+- `ANALYSIS_PROMPT` — the full analysis instructions using a price-tag-strip-first methodology (A: read tag strip, B: match tag to product, C: count facings by packaging type, D: handle OOS, E: cross-verify with labels), plus a data source hierarchy, with three placeholders:
   - `{metadata_block}` — store metadata (country, city, retailer, shelf location, etc.)
   - `{photo_list_block}` — list of photos with their tags (type + group)
   - `{transcript_block}` — transcript text (or empty if not provided)
