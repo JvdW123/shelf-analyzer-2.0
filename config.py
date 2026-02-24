@@ -115,7 +115,7 @@ CLAUDE_CONFIG = {
     "max_tokens": 128000,  # Claude Opus 4.6 maximum — prevents truncation on large shelves
     "thinking": {
         "type": "enabled",
-        "budget_tokens": 10000  # Balanced thinking for good speed and accuracy
+        "budget_tokens": 20000  # Hard cap — prevents unbounded thinking on complex shelves
     }
 }
 
