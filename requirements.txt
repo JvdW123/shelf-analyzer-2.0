@@ -1,5 +1,6 @@
 streamlit
 anthropic
+google-genai
 openpyxl
 Pillow
 pandas

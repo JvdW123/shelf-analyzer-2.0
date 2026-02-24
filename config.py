@@ -106,6 +106,13 @@ IMAGE_CONFIG = {
 }
 
 # ==============================================================================
+# MODEL SELECTION
+# ==============================================================================
+
+# Which model to use for shelf analysis: "claude" or "gemini"
+ANALYSIS_MODEL = "gemini"
+
+# ==============================================================================
 # CLAUDE API CONFIGURATION
 # ==============================================================================
 
@@ -120,6 +127,15 @@ CLAUDE_CONFIG = {
 }
 
 # ==============================================================================
+# GEMINI API CONFIGURATION
+# ==============================================================================
+
+GEMINI_CONFIG = {
+    "model": "gemini-3-flash-preview",
+    "thinking_level": "minimal",
+}
+
+# ==============================================================================
 # API PRICING (for cost estimation display)
 # ==============================================================================
 
@@ -128,6 +144,14 @@ CLAUDE_CONFIG = {
 PRICING = {
     "input_per_million": 15.00,   # USD per 1M input tokens
     "output_per_million": 75.00,  # USD per 1M output tokens (includes thinking)
+}
+
+# Google Gemini pricing per 1 million tokens (Gemini 3 Flash)
+# Update these values if pricing changes: https://ai.google.dev/pricing
+GEMINI_PRICING = {
+    "input_per_million": 0.15,    # USD per 1M input tokens
+    "output_per_million": 0.60,   # USD per 1M output tokens
+    "thinking_per_million": 0.60, # USD per 1M thinking tokens
 }
 
 # ==============================================================================
