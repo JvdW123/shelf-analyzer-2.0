@@ -366,11 +366,15 @@ if st.button("Analyze Shelf", disabled=not can_analyze, type="primary"):
     else:
         # Import required modules
         from modules.prompt_builder import build_prompt
-        from modules.claude_client import analyze_shelf
         from prompts.shelf_analysis import SYSTEM_PROMPT
-        from config import EXCHANGE_RATES, PRICING
-        import anthropic
+        from config import EXCHANGE_RATES, PRICING, ANALYSIS_MODEL
         import json
+        
+        if ANALYSIS_MODEL == "gemini":
+            from modules.gemini_client import analyze_shelf
+        else:
+            from modules.claude_client import analyze_shelf
+            import anthropic
         
         # Show progress status with detailed steps
         with st.status("Analyzing shelf photos...", expanded=True) as status:
@@ -428,7 +432,10 @@ if st.button("Analyze Shelf", disabled=not can_analyze, type="primary"):
                 st.session_state["last_prompt"] = user_prompt
                 
                 # Step 2: Send to Claude
-                st.write("Step 2: Sending to Claude Extended Thinking... (this may take 1-3 minutes)")
+                if ANALYSIS_MODEL == "gemini":
+                    st.write("Step 2: Sending to Gemini 3 Flash... (this may take 30-90 seconds)")
+                else:
+                    st.write("Step 2: Sending to Claude Extended Thinking... (this may take 1-3 minutes)")
                 
                 # Call Claude API (streaming)
                 result = analyze_shelf(
@@ -460,21 +467,9 @@ if st.button("Analyze Shelf", disabled=not can_analyze, type="primary"):
                     # Update status to complete
                     status.update(label=f"Analysis complete! Found {len(skus)} SKUs.", state="complete", expanded=False)
             
-            except anthropic.AuthenticationError:
-                status.update(label="Authentication failed", state="error", expanded=False)
-                st.error("Invalid API key. Check your settings.")
-            
-            except anthropic.APITimeoutError:
-                status.update(label="Request timed out", state="error", expanded=False)
-                st.error("Analysis timed out. Try with fewer photos or try again.")
-            
-            except anthropic.APIConnectionError:
-                status.update(label="Connection failed", state="error", expanded=False)
-                st.error("Network error. Check your internet connection.")
-            
             except json.JSONDecodeError as e:
                 status.update(label="Invalid JSON response", state="error", expanded=False)
-                st.error("Claude returned invalid JSON. See details below.")
+                st.error("Model returned invalid JSON. See details below.")
                 raw_response = st.session_state.get("raw_response", "No response captured")
                 with st.expander("Raw Response", expanded=True):
                     st.code(raw_response, language="text")
@@ -504,7 +499,7 @@ if "analysis_result" in st.session_state and st.session_state["analysis_result"]
     
     # Show usage metrics if available
     if "analysis_usage" in st.session_state:
-        from config import PRICING
+        from config import PRICING, GEMINI_PRICING, ANALYSIS_MODEL
         
         usage = st.session_state["analysis_usage"]
         elapsed = st.session_state.get("analysis_elapsed", 0)
@@ -514,18 +509,24 @@ if "analysis_result" in st.session_state and st.session_state["analysis_result"]
         output_tok = usage["output_tokens"]
         total_tok = input_tok + output_tok
         
-        input_cost = input_tok * PRICING["input_per_million"] / 1_000_000
-        output_cost = output_tok * PRICING["output_per_million"] / 1_000_000
+        if ANALYSIS_MODEL == "gemini":
+            pricing = GEMINI_PRICING
+        else:
+            pricing = PRICING
+        
+        input_cost = input_tok * pricing["input_per_million"] / 1_000_000
+        output_cost = output_tok * pricing["output_per_million"] / 1_000_000
         total_cost = input_cost + output_cost
         
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         col_m1.metric("Total Tokens", f"{total_tok:,}")
         col_m2.metric("Input Tokens", f"{input_tok:,}")
         col_m3.metric("Output Tokens", f"{output_tok:,}")
-        col_m4.metric("Estimated Cost", f"${total_cost:.2f}")
+        col_m4.metric("Estimated Cost", f"${total_cost:.4f}")
         
         col_t1, col_t2 = st.columns(2)
-        col_t1.metric("Processing Time", f"{elapsed:.1f}s")
+        model_label = "Gemini 3 Flash" if ANALYSIS_MODEL == "gemini" else "Claude Opus"
+        col_t1.metric("Processing Time", f"{elapsed:.1f}s", help=f"Model: {model_label}")
         if savings.get("original_bytes", 0) > 0:
             orig_mb = savings["original_bytes"] / (1024 * 1024)
             proc_mb = savings["processed_bytes"] / (1024 * 1024)
