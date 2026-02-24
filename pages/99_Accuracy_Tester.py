@@ -18,6 +18,7 @@ Diagnostic LLM calls are triggered only by explicit button clicks.
 
 import io
 import json
+import math
 import traceback
 from datetime import datetime
 
@@ -428,13 +429,26 @@ if st.session_state.get("at_scored_result") is not None:
     st.divider()
     st.header("5. Accuracy Results")
 
+    def _json_default(obj):
+        if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+            return None
+        return str(obj)
+
     _report_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    st.download_button(
-        label="Download Test Report",
-        data=json.dumps(result, indent=2, default=str),
-        file_name=f"accuracy_report_{_report_ts}.json",
-        mime="application/json",
-    )
+    try:
+        _report_json = json.dumps(result, indent=2, default=_json_default)
+    except Exception as e:
+        st.error("Failed to generate report — see terminal for details")
+        traceback.print_exc()
+        _report_json = None
+
+    if _report_json is not None:
+        st.download_button(
+            label="Download Test Report",
+            data=_report_json,
+            file_name=f"accuracy_report_{_report_ts}.json",
+            mime="application/json",
+        )
 
     # --- Download buttons ---
     if st.session_state.get("at_generated_excel_bytes"):
