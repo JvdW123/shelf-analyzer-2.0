@@ -19,6 +19,7 @@ Diagnostic LLM calls are triggered only by explicit button clicks.
 import io
 import json
 import traceback
+from datetime import datetime
 
 import pandas as pd
 import streamlit as st
@@ -426,6 +427,14 @@ if st.session_state.get("at_scored_result") is not None:
 
     st.divider()
     st.header("5. Accuracy Results")
+
+    _report_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    st.download_button(
+        label="Download Test Report",
+        data=json.dumps(result, indent=2, default=str),
+        file_name=f"accuracy_report_{_report_ts}.json",
+        mime="application/json",
+    )
 
     # --- Download buttons ---
     if st.session_state.get("at_generated_excel_bytes"):
