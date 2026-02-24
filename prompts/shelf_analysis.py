@@ -26,6 +26,10 @@ CHANGELOG:
 - v2.2: Added multipack naming and volume conventions
 - v2.2: Strengthened flavour field rule (do not invent ingredient-based flavours)
 - v2.2: Fixed source hierarchy for packaging size (cross-reference both sources)
+- v2.3: Removed "Excel formula" instructions from price_eur and price_per_liter_eur (replaced with numeric-value rule)
+- v2.3: Added JSON-only reminder after STEP 1 sub-steps A–E
+- v2.3: Fixed confidence_score descriptions to use integers (100/80/60/40) not % symbols
+- v2.3: Removed "currency" from the metadata-exclusion list to match key list and example
 """
 
 # ── SYSTEM PROMPT ──────────────────────────────────────────────────────────
@@ -135,6 +139,8 @@ After completing the tag-first pass, verify each SKU by reading the product labe
 
 This step catches any tag-to-product mismatches (e.g., a product placed in the wrong position on the shelf).
 
+Important: All reasoning above (steps A–E) happens internally. Your output must still be ONLY the JSON array — no narration, no summary, no explanation of what you found.
+
 --- DATA SOURCE HIERARCHY ---
 
 When different sources give conflicting information for a field, use this priority order:
@@ -179,9 +185,9 @@ Column | Source | Description
 16 Facings | Visual count | Number of identical products in the front row (side-by-side). Use the packaging-appropriate counting method from STEP 1C. Only count front row — ignore depth. Default to 1 if uncertain.
 17 Price (Local Currency) | Price tag (primary) | Shelf price in the local currency as displayed on the price tag (e.g., 3.49, 2.99). Leave blank if not visible. Do NOT estimate or guess prices.
 18 Currency | Metadata | The currency code for the store's country (e.g., EUR, GBP, SEK, DKK, CHF). This is determined by the country where the store is located.
-19 Price (EUR) | Calculated / Price label | Price in EUR. If the store is in a eurozone country, this equals Price (Local Currency). If the store is in a non-eurozone country (e.g., UK), convert using the applicable exchange rate or leave blank for manual conversion. Use an Excel formula where possible.
+19 Price (EUR) | Calculated / Price label | Price in EUR. If the store is in a eurozone country, this equals Price (Local Currency). If the store is in a non-eurozone country (e.g., UK), convert using the applicable exchange rate provided in the metadata. Output a calculated numeric value or null — never a formula string.
 20 Packaging Size (ml) | Price tag AND product label (cross-reference) | Volume in milliliters (e.g., 100, 250, 330, 750, 900, 1000, 1500, 1750, 2000). Check BOTH the price tag and the product label — use whichever source shows the volume most clearly. If only one source is visible, use that. If neither shows volume directly, try the unit price back-calculation from STEP 1A. Leave blank if volume cannot be determined. Do NOT default large bottles to 1000ml.
-21 Price per Liter (EUR) | Calculated | = Price (EUR) / (Packaging Size (ml) / 1000). Leave blank if price or ml is unknown. Use an Excel formula, not a hardcoded value.
+21 Price per Liter (EUR) | Calculated | price_eur divided by (packaging_size_ml divided by 1000). Leave blank (null) if price or ml is unknown. Output a calculated numeric value or null — never a formula string.
 22 Need State | AI assessment based on label + ingredients | Within Pure Juices and Smoothies, classify as: Indulgence (consumed primarily for taste) or Functional (has health benefit: e.g., added vitamins, protein, fiber, chia, probiotics, superfoods, etc.). Shots are almost always Functional. Base this on visible label claims, health-focused messaging, and special ingredients mentioned. If unclear, default to Indulgence.
 23 Juice Extraction Method | Transcript + label | How the juice was extracted. Use ONLY one of these values: Cold Pressed / Squeezed / From Concentrate / NA/Centrifugal. "Cold Pressed" = juice extracted using hydraulic press or slow press methods (often stated on label). "Squeezed" = juice extracted by squeezing — ONLY use this if the label explicitly says "squeezed" or "freshly squeezed". "From Concentrate" = reconstituted from concentrate (label says "from concentrate" or "made from concentrate"). "NA/Centrifugal" = default for all other juices where extraction method is not specified, or where standard centrifugal extraction is used (this covers NFC/direct juice and any product where the method is not explicitly stated). Important: "pressed", "pure pressed", or "100% pressed" on a label does NOT mean "Squeezed". Only use "Squeezed" if the label explicitly says "squeezed" or "freshly squeezed". Products labelled as "pressed" without further specification should be classified as "NA/Centrifugal". If you cannot determine the extraction method from label or transcript, use "NA/Centrifugal". ⚡
 24 Processing Method | Transcript + label | How the juice is preserved. Use ONLY one of these values: HPP / Pasteurised / Raw. "HPP" = High Pressure Processing (often mentioned on label or in transcript). "Pasteurised" = heat-treated / flash-pasteurised / thermally processed. "Raw" = no processing applied, sold as raw/unpasteurised. If you cannot determine the processing method from label or transcript, use "Pasteurised" as the default (since the vast majority of commercially sold juices are pasteurised). Use British spelling: "Pasteurised" not "Pasteurized".
@@ -192,7 +198,7 @@ Column | Source | Description
 29 Stock Status | Visual | "In Stock" or "Out of Stock". Mark as Out of Stock if you see a price tag with no product adjacent to it, an empty gap, or a dark space where a product should be.
 30 Est. Linear Meters | Visual (overview photos) | Estimated total linear meters of the ENTIRE shelf section being analyzed — not per SKU. Estimate this from the overview photo(s) that capture the full shelf width. Measure or estimate the horizontal width of the shelf unit(s) in meters (e.g., a standard supermarket fridge unit is typically ~1.0–1.25m wide). If multiple fridge units are side by side, sum their widths. This value should be the SAME for every row in the dataset since it describes the total shelf, not individual products. Leave blank if not determinable from the overview photos.
 31 Fridge Number | Metadata / Visual | Identifier for which fridge or cooler unit the product is located in (e.g., "Fridge 1", "Fridge 2"). Use when a store has multiple separate chilled display units. Leave blank if only one fridge or not applicable.
-32 Confidence Score | Your assessment | 100% = clearly visible and certain / 80% = mostly clear / 60% = partially visible, inferred / 40% = uncertain, low visibility
+32 Confidence Score | Your assessment | 100 = clearly visible and certain / 80 = mostly clear / 60 = partially visible, inferred / 40 = uncertain, low visibility
 33 Notes | Any source | Free text for context: "price not fully visible", "transcript confirms flavor", "reflection obscures label", "conflict between price tag and label — tag used for price", "also visible in photo X"
 
 PRODUCT NAME VS FLAVOR — How to distinguish (critical):
@@ -230,7 +236,7 @@ Data type rules:
 - "confidence_score": integer from 0 to 100 (e.g., 90, 75, 60) — NOT a string like "90%"
 - All other fields: strings (use "" for empty/unknown values)
 
-You do NOT need to include "country", "city", "retailer", "store_format", "store_name", "shelf_location", or "currency" — these are filled in automatically from user metadata.
+You do NOT need to include "country", "city", "retailer", "store_format", "store_name", or "shelf_location" — these are filled in automatically from user metadata.
 
 Group SKUs by photo (all SKUs from photo 1, then photo 2, etc.). Each unique SKU appears only ONCE.
 

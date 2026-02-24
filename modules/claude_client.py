@@ -102,6 +102,13 @@ def analyze_shelf(
 
             final_message = stream.get_final_message()
 
+        if final_message.stop_reason == "max_tokens":
+            raise Exception(
+                f"Claude's response was truncated (hit the {CLAUDE_CONFIG['max_tokens']:,} token limit). "
+                f"The JSON output is incomplete. Try reducing the number of photos per batch, "
+                f"or increase max_tokens in config.py."
+            )
+
         elapsed = time.time() - start_time
 
         # Extract usage from the final message

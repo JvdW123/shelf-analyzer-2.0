@@ -112,7 +112,7 @@ IMAGE_CONFIG = {
 # Settings for Claude Opus 4.6 Extended Thinking API calls
 CLAUDE_CONFIG = {
     "model": "claude-opus-4-6",
-    "max_tokens": 64000,  # Maximum capacity - handles 140+ SKUs
+    "max_tokens": 128000,  # Claude Opus 4.6 maximum — prevents truncation on large shelves
     "thinking": {
         "type": "enabled",
         "budget_tokens": 10000  # Balanced thinking for good speed and accuracy
