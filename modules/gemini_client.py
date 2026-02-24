@@ -20,6 +20,7 @@ import streamlit as st
 from google import genai
 from google.genai import types
 from config import GEMINI_CONFIG, COLUMN_SCHEMA
+from modules.image_processor import resize_image
 
 METADATA_KEYS = frozenset([
     "country", "city", "retailer", "store_format",
@@ -94,19 +95,26 @@ def analyze_shelf(
     Raises:
         Exception: If API call fails or response cannot be parsed
     """
-    client = genai.Client(api_key=st.secrets["gemini_api_key"])
+    client = genai.Client(
+        api_key=st.secrets["gemini_api_key"],
+        http_options=types.HttpOptions(timeout=120_000),
+    )
 
     contents: list[types.Part] = []
-    total_bytes = 0
+    total_original_bytes = 0
+    total_processed_bytes = 0
 
     for photo in photos:
         photo_label = f"[Photo: {photo['filename']} | {photo['type']} | Group {photo['group']}]"
         contents.append(types.Part.from_text(text=photo_label))
 
-        image_bytes = photo["data"]
-        total_bytes += len(image_bytes)
+        original_bytes = photo["data"]
+        processed_bytes, _ = resize_image(original_bytes, photo["filename"])
+
+        total_original_bytes += len(original_bytes)
+        total_processed_bytes += len(processed_bytes)
         contents.append(
-            types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
+            types.Part.from_bytes(data=processed_bytes, mime_type="image/jpeg")
         )
 
     contents.append(types.Part.from_text(text=user_prompt))
@@ -152,8 +160,8 @@ def analyze_shelf(
             "usage": usage,
             "elapsed_seconds": elapsed,
             "image_savings": {
-                "original_bytes": total_bytes,
-                "processed_bytes": total_bytes,
+                "original_bytes": total_original_bytes,
+                "processed_bytes": total_processed_bytes,
             },
             "raw_response": response_text,
         }
