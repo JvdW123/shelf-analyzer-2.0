@@ -16,6 +16,7 @@ The comparison step is 100% pure Python — no LLM calls involved.
 Diagnostic LLM calls are triggered only by explicit button clicks.
 """
 
+import concurrent.futures
 import io
 import json
 import traceback
@@ -85,6 +86,23 @@ from accuracy_tester.key_normaliser import normalise_keys
 from accuracy_tester.comparator import match_rows
 from accuracy_tester.scorer import score_all_sections, merge_section6
 from accuracy_tester.semantic_scorer import score_semantic_fields
+
+
+def _simple_keys(rows: list[dict]) -> list[dict]:
+    """
+    Build normalised row keys locally (no LLM) for preliminary row matching.
+    Used to pair rows for the semantic scorer so it can run in parallel with
+    the LLM-based key normaliser rather than waiting for it to finish.
+    """
+    result = []
+    for i, row in enumerate(rows):
+        brand = str(row.get("brand") or "unknown").lower().strip()
+        name = str(row.get("product_name") or "unknown").lower().strip()
+        size = row.get("packaging_size_ml")
+        size_str = f"{size}ml" if size else "unknown"
+        result.append({"row_index": i, "key": f"{brand} | {name} | {size_str}"})
+    return result
+
 
 # ---------------------------------------------------------------------------
 # Session state initialisation
@@ -365,13 +383,30 @@ if st.button(
         # --- Accuracy scoring (3-step hybrid pipeline) ---
         api_key = st.secrets["anthropic_api_key"]
 
+        # Steps 1 and 3 (both Sonnet API calls) run in parallel.
+        # Step 3 needs matched_pairs, so we compute a preliminary local match
+        # (no LLM) to unblock it. Step 2 then re-runs match_rows with the
+        # proper LLM-normalised keys for accurate field scoring.
         try:
-            st.write("Step 1: Normalising SKU keys (~20s)...")
-            keys = normalise_keys(gt_rows, gen_rows, api_key)
+            st.write("Steps 1 & 3: Key normalisation + semantic scoring in parallel (~20s)...")
+            prelim_match = match_rows(
+                _simple_keys(gt_rows), _simple_keys(gen_rows), gt_rows, gen_rows,
+            )
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                keys_future = executor.submit(normalise_keys, gt_rows, gen_rows, api_key)
+                sem_future = executor.submit(
+                    score_semantic_fields,
+                    prelim_match.matched_pairs,
+                    gt_rows,
+                    gen_rows,
+                    api_key,
+                )
+                keys = keys_future.result()
+                semantic_result = sem_future.result()
         except Exception as e:
-            status.update(label="Error in key normalisation", state="error")
-            with st.expander("Key normalisation failed — raw error"):
-                st.code(str(e))
+            status.update(label="Error in parallel scoring steps", state="error")
+            with st.expander("Parallel scoring failed — raw error"):
+                st.code(traceback.format_exc())
             st.stop()
 
         try:
@@ -384,20 +419,6 @@ if st.button(
             status.update(label="Error in field scoring", state="error")
             with st.expander("Field scoring failed — raw error"):
                 st.code(traceback.format_exc())
-            st.stop()
-
-        try:
-            st.write("Step 3: Semantic quality check (~20s)...")
-            semantic_result = score_semantic_fields(
-                matched_pairs=match_result.matched_pairs,
-                gt_rows=gt_rows,
-                gen_rows=gen_rows,
-                api_key=api_key,
-            )
-        except Exception as e:
-            status.update(label="Error in semantic scoring", state="error")
-            with st.expander("Semantic scoring failed — raw error"):
-                st.code(str(e))
             st.stop()
 
         # Merge Section 6 (critical from scorer + warnings from semantic)
